@@ -245,6 +245,40 @@ def main():
         check("aborted fetch leaves no marker",
               b.latest_complete(root, "committee-question", 2024), None)
 
+    # ---- 0.2: v2 endpoint, never paged
+    ct = "committee-question"
+    u = b.v2_url(ct, year=2024)
+    check("v2_url is v2 and never sends a page parameter",
+          (u.startswith(b.API + "/v2/"), "page" in dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(u).query))),
+          (True, False))
+    check("v2_url per_page 500", b.v2_url(ct), "https://api.pmg.org.za/v2/minister-questions/?per_page=500")
+    check("v2_url year filter", b.v2_url(ct, year=2024),
+          "https://api.pmg.org.za/v2/minister-questions/?per_page=500&filter%5Byear%5D=2024")
+    check("v2_url date filter", b.v2_url(ct, date=dt.date(2025, 3, 14)),
+          "https://api.pmg.org.za/v2/minister-questions/?per_page=500&filter%5Bdate%5D=2025-03-14")
+    check("v2_url rejects year and date together",
+          raises(ValueError, lambda: b.v2_url(ct, year=2025, date=dt.date(2025, 1, 1))), True)
+
+    check("days_in full year", len(b.days_in(2025, dt.date(2030, 1, 1))), 365)
+    check("days_in leap year", len(b.days_in(2024, dt.date(2030, 1, 1))), 366)
+    check("days_in starts on 1 January", (b.days_in(2026, dt.date(2026, 1, 3)) or [None])[0], dt.date(2026, 1, 1))
+    check("days_in stops at until", (b.days_in(2026, dt.date(2026, 1, 3)) or [None])[-1], dt.date(2026, 1, 3))
+    check("mode_for 500 is one request", b.mode_for(500), "all")
+    check("mode_for 501 is per day", b.mode_for(501), "day")
+    check("requests_for small year", b.requests_for(2010, 6, NOW.date()), 2)
+    check("requests_for big past year", b.requests_for(2025, 7540, NOW.date()), 366)
+    check("part_path whole year", b.part_path(Path("f"), None).name, "part=all.json")
+    check("part_path one day", b.part_path(Path("f"), dt.date(2025, 6, 6)).name, "part=2025-06-06.json")
+
+    pmg = FakePMG(recs(2024, {"03-01": 3}) + recs(2025, {"05-02": 2}))
+    check("count_of a year", b.count_of(pmg.fetch, ct, year=2024), 3)
+    check("count_of asks for one record", "per_page=1" in (pmg.urls or [""])[-1], True)
+    pmg = FakePMG(recs(2024, {"03-01": 3}) + recs(2025, {"05-02": 2}))
+    total, per_year = b.probe_counts(pmg.fetch, ct, [2023, 2024, 2025], 0, **NOSLEEP)
+    check("probe_counts total and years", (total, per_year), (5, {2024: 3, 2025: 2}))
+    check("probe_counts asks for one record each time",
+          bool(pmg.urls) and all("per_page=1" in x for x in pmg.urls), True)
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 
