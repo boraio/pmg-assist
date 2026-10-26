@@ -160,24 +160,38 @@ def plan(years: list[int], current_year: int, complete: dict[int, bool], force: 
     return todo
 
 
-def v2_url(ctype, *, year=None, date=None, per_page=PER_PAGE):
-    return ""
+def v2_url(ctype: str, *, year: int | None = None, date: dt.date | None = None,
+           per_page: int = PER_PAGE) -> str:
+    """A v2 list URL. Never carries a page parameter: nothing in 0.2 pages."""
+    if year is not None and date is not None:
+        raise ValueError("filter by year or by date, not both")
+    query: dict[str, object] = {"per_page": per_page}
+    if year is not None:
+        query["filter[year]"] = year
+    if date is not None:
+        query["filter[date]"] = date.isoformat()
+    return f"{API}{SOURCES[ctype]}?{urllib.parse.urlencode(query)}"
 
 
-def days_in(year, until):
-    return []
+def days_in(year: int, until: dt.date) -> list[dt.date]:
+    """Every calendar day of `year`, stopping at `until` (inclusive)."""
+    first = dt.date(year, 1, 1)
+    last = min(dt.date(year, 12, 31), until)
+    return [first + dt.timedelta(days=i) for i in range((last - first).days + 1)]
 
 
-def mode_for(count):
-    return ""
+def mode_for(count: int) -> str:
+    return "all" if count <= PER_PAGE else "day"
 
 
-def requests_for(year, count, today):
-    return 0
+def requests_for(year: int, count: int, today: dt.date) -> int:
+    """Requests a year costs: the fetch itself plus the closing count check."""
+    units = 1 if mode_for(count) == "all" else len(days_in(year, today))
+    return units + 1
 
 
-def part_path(fetch_dir, unit):
-    return Path(fetch_dir)
+def part_path(fetch_dir: Path, unit: dt.date | None) -> Path:
+    return Path(fetch_dir) / f"part={unit.isoformat() if unit else 'all'}.json"
 
 
 def count_of(fetch, ctype, **filters):
