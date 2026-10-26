@@ -376,7 +376,7 @@ def main(argv: list[str] | None = None) -> int:
     for y in sorted(per_year):
         m = latest_complete(args.root, args.type, y)
         local = f"complete ({m['unique_ids']} @ {m['fetched_at']})" if m else "missing"
-        print(f"  {y}: api={per_year[y]:>6}  local={local}")
+        print(f"  {y}: api={per_year[y]:>6}  mode={mode_for(per_year[y]):<3}  local={local}")
     if args.status:
         return 0
 
