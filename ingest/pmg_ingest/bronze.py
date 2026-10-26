@@ -200,8 +200,48 @@ def count_of(fetch, ctype: str, **filters) -> int:
     return page["count"]
 
 
-def backfill_year(fetch, root, ctype, year, count_before, now, delay, sleep=time.sleep):
-    return {}
+def backfill_year(fetch, root: Path, ctype: str, year: int, count_before: int,
+                  now: dt.datetime, delay: float, sleep=time.sleep) -> dict:
+    fdir = partition_dir(root, ctype, year) / f"fetched={fetch_stamp(now)}"
+    if fdir.exists():
+        raise Abort(f"{fdir} already exists; refusing to overwrite a fetch")
+    mode = mode_for(count_before)
+    units: list[dt.date | None] = [None] if mode == "all" else days_in(year, now.date())
+
+    ids: set = set()
+    records = files = 0
+    for unit in units:
+        url = v2_url(ctype, year=year) if unit is None else v2_url(ctype, date=unit)
+        raw, data = fetch(url)
+        if data["next"] is not None:
+            raise Abort(f"{ctype} {unit or year}: {data['count']} records do not fit on one "
+                        f"page of {PER_PAGE}; this needs a finer partition, not paging")
+        if data["results"]:
+            write_atomic(part_path(fdir, unit), raw)
+            files += 1
+        for r in data["results"]:
+            records += 1
+            ids.add(r.get("id"))
+        sleep(delay)
+
+    count_after = count_of(fetch, ctype, year=year)
+    marker = {
+        "type": ctype,
+        "year": year,
+        "mode": mode,
+        "fetched_at": now.astimezone(dt.UTC).isoformat(),
+        "requests": len(units),
+        "files": files,
+        "api_count_before": count_before,
+        "api_count_after": count_after,
+        "records": records,
+        "unique_ids": len(ids),
+        "complete": records == len(ids) == count_after,
+        "ingest_version": VERSION,
+    }
+    # Written after the data, so a crash leaves an incomplete fetch, never a false "complete".
+    write_atomic(fdir / "_marker.json", json.dumps(marker, indent=2).encode())
+    return marker
 
 # ---------------------------------------------------------- side effects
 
