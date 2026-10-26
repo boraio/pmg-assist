@@ -354,7 +354,7 @@ def backfill_partition(fetch, root: Path, ctype: str, year: int, now: dt.datetim
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--type", default="committee-question", choices=sorted(YEAR_PARTITIONED))
+    ap.add_argument("--type", default="committee-question", choices=sorted(SOURCES))
     ap.add_argument("--root", default="data/bronze", type=Path)
     ap.add_argument("--years", default=f"2000-{dt.date.today().year}")
     ap.add_argument("--delay", type=float, default=1.0, help="seconds between requests")
