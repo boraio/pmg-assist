@@ -160,6 +160,33 @@ def plan(years: list[int], current_year: int, complete: dict[int, bool], force: 
     return todo
 
 
+def v2_url(ctype, *, year=None, date=None, per_page=PER_PAGE):
+    return ""
+
+
+def days_in(year, until):
+    return []
+
+
+def mode_for(count):
+    return ""
+
+
+def requests_for(year, count, today):
+    return 0
+
+
+def part_path(fetch_dir, unit):
+    return Path(fetch_dir)
+
+
+def count_of(fetch, ctype, **filters):
+    return -1
+
+
+def backfill_year(fetch, root, ctype, year, count_before, now, delay, sleep=time.sleep):
+    return {}
+
 # ---------------------------------------------------------- side effects
 
 
