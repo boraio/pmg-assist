@@ -73,6 +73,62 @@ def fake_fetch(pages):
     return fetch, urls
 
 
+class FakePMG:
+    """Filters and pages like pmg/api/v2.py: filter_by on year or date, then LIMIT/OFFSET.
+
+    `records` are dicts with id, year and date (ISO string). `after_first` is
+    added once the first request has been served, as a question published
+    mid-run would be. `count_unique` counts distinct ids, as a server that
+    serves one record twice would.
+    """
+
+    def __init__(self, records, after_first=(), count_unique=False):
+        self.records = list(records)
+        self.after_first = list(after_first)
+        self.count_unique = count_unique
+        self.urls = []
+
+    def fetch(self, url):
+        self.urls.append(url)
+        q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+        rows = self.records
+        if "filter[year]" in q:
+            rows = [r for r in rows if r["year"] == int(q["filter[year]"])]
+        if "filter[date]" in q:
+            rows = [r for r in rows if r["date"] == q["filter[date]"]]
+        per_page, pg = int(q.get("per_page", 50)), int(q.get("page", 0))
+        out = {
+            "count": len({r["id"] for r in rows}) if self.count_unique else len(rows),
+            "next": "more" if len(rows) > (pg + 1) * per_page else None,
+            "results": rows[pg * per_page:(pg + 1) * per_page],
+        }
+        if self.after_first:
+            self.records += self.after_first
+            self.after_first = []
+        return json.dumps(out).encode(), out
+
+
+def recs(year, per_day):
+    """per_day: {"MM-DD": n}. Ids are unique within one call."""
+    out, i = [], year * 10_000
+    for md, n in per_day.items():
+        for _ in range(n):
+            i += 1
+            out.append({"id": i, "year": year, "date": f"{year}-{md}"})
+    return out
+
+
+def get(d, *keys):
+    """Nested .get that never raises, so a stub's wrong value prints FAIL, not a traceback."""
+    for k in keys:
+        if not isinstance(d, dict):
+            return None
+        d = d.get(k)
+    return d
+
+
+NOSLEEP = {"sleep": lambda s: None}
+
 NOW = dt.datetime(2026, 10, 26, 9, 30, tzinfo=dt.UTC)
 
 
