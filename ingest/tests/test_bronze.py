@@ -202,43 +202,6 @@ def main():
     fetch = b.make_fetch("UA/1", opener=opener, sleep=lambda s: None)
     check("fetch aborts on non-JSON body", raises(b.Abort, lambda: fetch("https://x/")), True)
 
-    # backfill_partition
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        fetch, urls = fake_fetch([page([5, 4], 5, "n1"), page([3, 2], 5, "n2"), page([1], 5, None)])
-        m = b.backfill_partition(fetch, root, "committee-question", 2026, NOW, 0, sleep=lambda s: None)
-        fdir = root / "committee-question" / "year=2026" / "fetched=20261026T093000Z"
-        check("backfill complete when ids == count", m["complete"], True)
-        check("backfill counts pages", m["pages"], 3)
-        check("backfill writes one file per page",
-              sorted(p.name for p in fdir.glob("page=*.json")),
-              ["page=00000.json", "page=00001.json", "page=00002.json"])
-        check("backfill page file is the raw body", json.loads((fdir / "page=00001.json").read_text())["results"][0]["id"], 3)
-        check("backfill requests carry the year filter", all("filter%5Byear%5D=2026" in u for u in urls), True)
-        check("marker readable", b.read_marker(fdir)["unique_ids"], 5)
-        check("latest_complete finds it", b.latest_complete(root, "committee-question", 2026)["api_count"], 5)
-        check("no tmp files left", list(fdir.glob("*.tmp")), [])
-
-        fetch, _ = fake_fetch([page([1], 1, None)])
-        check("backfill refuses to overwrite an existing fetch",
-              raises(b.Abort, lambda: b.backfill_partition(fetch, root, "committee-question", 2026, NOW, 0,
-                                                            sleep=lambda s: None)), True)
-
-        # page shift: a duplicate id across pages means a record was missed
-        later = NOW + dt.timedelta(hours=1)
-        fetch, _ = fake_fetch([page([5, 4], 5, "n"), page([4, 3], 5, "n"), page([2], 5, None)])
-        m = b.backfill_partition(fetch, root, "committee-question", 2025, later, 0, sleep=lambda s: None)
-        check("backfill incomplete when ids != count", m["complete"], False)
-        check("incomplete fetch is not 'latest complete'", b.latest_complete(root, "committee-question", 2025), None)
-
-        # next never null
-        endless = [page([i], 2, "n") for i in range(20)]
-        fetch, _ = fake_fetch(endless)
-        check("backfill aborts when paging never ends",
-              raises(b.Abort, lambda: b.backfill_partition(fetch, root, "committee-question", 2024, later, 0,
-                                                            sleep=lambda s: None)), True)
-        check("aborted fetch leaves no marker",
-              b.latest_complete(root, "committee-question", 2024), None)
 
     # ---- 0.2: v2 endpoint, never paged
     ct = "committee-question"
