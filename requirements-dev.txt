@@ -1,0 +1,5 @@
+-r api/requirements.txt
+ruff==0.17.1
+pytest
+httpx
+openapi-spec-validator

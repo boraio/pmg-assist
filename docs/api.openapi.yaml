@@ -1,0 +1,535 @@
+openapi: 3.1.0
+info:
+  title: pmg-assist API
+  version: 1.0.0
+  description: |
+    Answers questions about South African parliamentary activity, grounded in
+    Parliamentary Monitoring Group (PMG) records, with citations.
+
+    This file is the source of truth for the contract. The iOS and Android
+    clients generate their model types from it. Reasoning for the shape of
+    the response, refusals, conversation state and versioning is in
+    docs/adr/0001-api-contract-v1.md.
+
+    Invariants the server must uphold (schema enforces what it can; server
+    tests enforce the rest):
+    - An answered response always has at least one statement, and every
+      statement cites at least one citation in the same response.
+    - A citation's `quote.speaker` is set only when the retrieved text itself
+      attributes those words to that person. Otherwise it is null.
+    - A refusal is a successful (200) response, not an error.
+    - The API reports what the record says. It never evaluates, ranks or
+      characterises people, parties or policies.
+
+    All example data in this file is fictional. Do not replace it with
+    statements by real people.
+
+servers:
+  - url: https://api.pmg-assist.invalid
+    description: Placeholder. Replace when the hosted target exists.
+
+tags:
+  - name: query
+  - name: ops
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [ops]
+      summary: Liveness
+      description: |
+        Reports that the API process is running. Deliberately does not check
+        the database or model provider: a liveness failure causes a restart,
+        and restarting the API does not fix a database outage. Unversioned,
+        because it is an infrastructure endpoint, not part of the client
+        contract.
+      responses:
+        '200':
+          description: The process is up.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: ok
+
+  /v1/query:
+    post:
+      operationId: postQuery
+      tags: [query]
+      summary: Ask a question about parliamentary activity
+      description: |
+        Returns either an answer with citations or a refusal. Both are
+        HTTP 200 and are distinguished by `outcome`. Non-2xx statuses mean the
+        request could not be processed at all.
+
+        The server is stateless. Conversation context, if any, is sent by the
+        client in `history` and is used only to interpret the new question
+        (e.g. resolving "she" or "that meeting"). It is never used as
+        evidence: every statement in an answer is grounded in records
+        retrieved for this request.
+      parameters:
+        - $ref: '#/components/parameters/ClientVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+            examples:
+              firstQuestion:
+                summary: A first question, no history
+                value:
+                  question: Which committee oversees water policy, and what did it discuss in September?
+                  history: []
+              followUp:
+                summary: A follow-up that relies on history
+                value:
+                  question: What did they say about the backlog at that meeting?
+                  history:
+                    - question: Which committee oversees water policy, and what did it discuss in September?
+                      answer_text: The Portfolio Committee on Water and Sanitation received a briefing on licensing turnaround times.
+                      cited_record_ids: [pmg-cm-00000]
+      responses:
+        '200':
+          description: An answer with citations, or a refusal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResponse'
+              examples:
+                answered:
+                  $ref: '#/components/examples/Answered'
+                refused:
+                  $ref: '#/components/examples/Refused'
+        '422':
+          $ref: '#/components/responses/InvalidRequest'
+        '426':
+          $ref: '#/components/responses/UpgradeRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+
+components:
+  parameters:
+    ClientVersion:
+      name: PMG-Client-Version
+      in: header
+      required: true
+      description: |
+        Platform and app version of the caller, e.g. `ios/1.0.0`. Lets the
+        server refuse builds it can no longer serve with 426 instead of
+        returning a body the build cannot decode.
+      schema:
+        type: string
+        pattern: '^(ios|android)/[0-9]+\.[0-9]+\.[0-9]+$'
+        example: ios/1.0.0
+
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    QueryRequest:
+      type: object
+      required: [question]
+      properties:
+        question:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: The user's question, as typed.
+        history:
+          type: array
+          maxItems: 10
+          default: []
+          description: |
+            Earlier turns in this conversation, oldest first, held by the
+            client. Used only to interpret `question`. Treated as untrusted
+            input: never cited, never used as evidence.
+          items:
+            $ref: '#/components/schemas/Turn'
+
+    Turn:
+      type: object
+      required: [question]
+      properties:
+        question:
+          type: string
+          maxLength: 1000
+        answer_text:
+          type: [string, 'null']
+          maxLength: 4000
+          description: |
+            The answer statements the client displayed for this turn, joined
+            as plain text. Null if the turn was refused.
+        cited_record_ids:
+          type: array
+          maxItems: 20
+          default: []
+          description: '`record.record_id` values cited in that turn.'
+          items:
+            type: string
+
+    QueryResponse:
+      oneOf:
+        - $ref: '#/components/schemas/AnsweredResponse'
+        - $ref: '#/components/schemas/RefusedResponse'
+      discriminator:
+        propertyName: outcome
+        mapping:
+          answered: '#/components/schemas/AnsweredResponse'
+          refused: '#/components/schemas/RefusedResponse'
+
+    AnsweredResponse:
+      type: object
+      required: [outcome, response_id, answer, citations, corpus]
+      properties:
+        outcome:
+          type: string
+          enum: [answered]
+        response_id:
+          $ref: '#/components/schemas/ResponseId'
+        answer:
+          $ref: '#/components/schemas/Answer'
+        citations:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Citation'
+        corpus:
+          $ref: '#/components/schemas/Corpus'
+
+    RefusedResponse:
+      type: object
+      required: [outcome, response_id, refusal, corpus]
+      properties:
+        outcome:
+          type: string
+          enum: [refused]
+        response_id:
+          $ref: '#/components/schemas/ResponseId'
+        refusal:
+          $ref: '#/components/schemas/Refusal'
+        corpus:
+          $ref: '#/components/schemas/Corpus'
+
+    ResponseId:
+      type: string
+      format: uuid
+      description: |
+        Server-generated identifier for this response, for correlating bug
+        reports and logs. Not a session identifier; the server keeps no
+        conversation state keyed on it.
+
+    Answer:
+      type: object
+      required: [statements]
+      properties:
+        statements:
+          type: array
+          minItems: 1
+          description: |
+            The answer as an ordered list of statements. There is no free text
+            outside statements, so there is nowhere for an uncited claim to go.
+          items:
+            $ref: '#/components/schemas/Statement'
+
+    Statement:
+      type: object
+      required: [text, citation_ids]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          description: Plain text. No Markdown or HTML; clients render it as-is.
+        citation_ids:
+          type: array
+          minItems: 1
+          description: |
+            `id` values of entries in this response's `citations`. Every value
+            must resolve; the server guarantees this.
+          items:
+            type: string
+
+    Citation:
+      type: object
+      required: [id, record, quote]
+      properties:
+        id:
+          type: string
+          description: Identifier local to this response, e.g. `c1`.
+        record:
+          $ref: '#/components/schemas/Record'
+        quote:
+          $ref: '#/components/schemas/Quote'
+
+    Record:
+      type: object
+      description: The PMG record a citation points to. Enough to render a source card and open the original.
+      required: [record_id, record_type, title, record_date, url, publisher, participants]
+      properties:
+        record_id:
+          type: string
+          description: Stable identifier for the record across responses and index rebuilds.
+        record_type:
+          type: string
+          description: |
+            Kind of record. Open set: clients must handle values they do not
+            recognise (render as a generic record). Known values:
+            `committee_meeting`, `question_reply`, `hansard`, `bill`.
+        title:
+          type: string
+          description: Record title as published by PMG.
+        record_date:
+          type: string
+          format: date
+          description: |
+            Date the meeting, sitting or reply took place (South African
+            calendar date), not the date PMG published it. Clients display
+            this prominently on every source card.
+        url:
+          type: string
+          format: uri
+          description: The record's page on PMG. The tap-through target.
+        publisher:
+          $ref: '#/components/schemas/Publisher'
+        committee:
+          oneOf:
+            - $ref: '#/components/schemas/Committee'
+            - type: 'null'
+        ministry:
+          oneOf:
+            - $ref: '#/components/schemas/MinistryAtDate'
+            - type: 'null'
+        participants:
+          type: array
+          description: People listed as participants in the record, with roles as recorded at the time.
+          items:
+            $ref: '#/components/schemas/Person'
+
+    Publisher:
+      type: object
+      required: [name, url]
+      description: Attribution shown on every source card.
+      properties:
+        name:
+          type: string
+          example: Parliamentary Monitoring Group
+        url:
+          type: string
+          format: uri
+          example: https://pmg.org.za
+
+    Committee:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    MinistryAtDate:
+      type: object
+      required: [name, as_of]
+      description: |
+        The ministry responsible for this record's subject on `as_of`, per
+        pmg-assist's date-aware portfolio mapping. Derived by pmg-assist, not
+        stated by PMG; clients label it accordingly.
+      properties:
+        name:
+          type: string
+        as_of:
+          type: string
+          format: date
+
+    Person:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: Name exactly as it appears in the record.
+        role_as_recorded:
+          type: [string, 'null']
+          description: Role as stated in the record at the time, e.g. "Minister" or "Chairperson". Not today's role.
+
+    Quote:
+      type: object
+      required: [text, speaker]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          description: Verbatim excerpt from the record supporting the statements that cite it. Never paraphrased.
+        speaker:
+          description: |
+            Set only when the retrieved text itself attributes these words to
+            this person. Null when the record does not name the speaker of this
+            passage; clients then show no speaker.
+          oneOf:
+            - $ref: '#/components/schemas/Person'
+            - type: 'null'
+
+    Refusal:
+      type: object
+      required: [reason, message]
+      properties:
+        reason:
+          type: string
+          description: |
+            Machine-readable reason. Open set: clients must handle unknown
+            values by showing `message`. Known values:
+            - `insufficient_evidence`: retrieval did not clear the threshold.
+            - `outside_corpus`: the question is not about parliamentary records.
+            - `requests_evaluation`: the question asks for an opinion, ranking
+              or characterisation of people, parties or policies.
+            - `unsupported_language`: the question is in a language not yet supported.
+        message:
+          type: string
+          description: Display-ready plain text explaining the refusal to the user.
+
+    Corpus:
+      type: object
+      required: [latest_record_date, index_published_at]
+      description: |
+        Freshness of the index that served this response. The index can lag
+        if ingest has not run; clients can show "records up to <date>".
+      properties:
+        latest_record_date:
+          type: string
+          format: date
+          description: Most recent `record_date` in the index.
+        index_published_at:
+          type: string
+          format: date-time
+          description: When the serving index was published.
+
+    Problem:
+      type: object
+      description: RFC 9457 problem details. Used for every non-2xx response.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        code:
+          type: string
+          description: 'Stable machine-readable code. Open set; known values: `invalid_request`, `upgrade_required`, `rate_limited`, `internal_error`, `unavailable`.'
+
+    UpgradeRequiredProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          required: [minimum_client_version]
+          properties:
+            minimum_client_version:
+              type: string
+              example: 1.2.0
+
+  responses:
+    InvalidRequest:
+      description: The request body or headers failed validation.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    UpgradeRequired:
+      description: This client build is no longer supported. The client must prompt the user to update.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/UpgradeRequiredProblem'
+    RateLimited:
+      description: Too many requests.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait before retrying.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InternalError:
+      description: Unexpected server failure.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unavailable:
+      description: A dependency (database or model provider) is unavailable. Distinct from a refusal.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  examples:
+    Answered:
+      summary: An answer (fictional data)
+      value:
+        outcome: answered
+        response_id: 3f1c9a2e-7b4d-4e8a-9c1f-2d6b8e0a5c47
+        answer:
+          statements:
+            - text: The Portfolio Committee on Water and Sanitation received a briefing on water-use licence turnaround times on 10 September 2026.
+              citation_ids: [c1]
+            - text: Example Person A told the committee that the department aimed to clear the licence backlog by March.
+              citation_ids: [c1]
+        citations:
+          - id: c1
+            record:
+              record_id: pmg-cm-00000
+              record_type: committee_meeting
+              title: Water-use licence turnaround times (example record)
+              record_date: '2026-09-10'
+              url: https://pmg.org.za/committee-meeting/00000/
+              publisher:
+                name: Parliamentary Monitoring Group
+                url: https://pmg.org.za
+              committee:
+                name: Portfolio Committee on Water and Sanitation
+              ministry:
+                name: Ministry of Water and Sanitation
+                as_of: '2026-09-10'
+              participants:
+                - name: Example Person A
+                  role_as_recorded: Director-General
+                - name: Example Person B
+                  role_as_recorded: Chairperson
+            quote:
+              text: The department aims to clear the licence backlog by the end of March.
+              speaker:
+                name: Example Person A
+                role_as_recorded: Director-General
+        corpus:
+          latest_record_date: '2026-10-02'
+          index_published_at: '2026-10-03T04:00:00+02:00'
+    Refused:
+      summary: A refusal
+      value:
+        outcome: refused
+        response_id: 8a2d4f60-1c3e-4b7a-a9d5-6e0f2b4c8d13
+        refusal:
+          reason: insufficient_evidence
+          message: I couldn't find parliamentary records that answer this question. Records are available up to 2 October 2026.
+        corpus:
+          latest_record_date: '2026-10-02'
+          index_published_at: '2026-10-03T04:00:00+02:00'

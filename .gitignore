@@ -324,3 +324,8 @@ google-services.json
 credentials
 .venv/
 data/raw/
+.pmgvenv/
+data/
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v*
