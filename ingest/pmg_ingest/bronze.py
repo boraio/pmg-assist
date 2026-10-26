@@ -381,22 +381,24 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     todo = plan(sorted(per_year), now.year, complete, args.force)
-    pages = sum(math.ceil(per_year[y] / PAGE_SIZE) for y in todo)
-    print(f"plan: {len(todo)} partitions, ~{pages} pages, ~{pages * args.delay / 60:.0f} min at {args.delay}s")
+    n = sum(requests_for(y, per_year[y], now.date()) for y in todo)
+    print(f"plan: {len(todo)} years, ~{n} requests, ~{n * args.delay / 60:.0f} min at {args.delay}s "
+          "(plus response time)")
     if args.dry_run:
         return 0
 
     failed = 0
     for y in todo:
         try:
-            m = backfill_partition(fetch, args.root, args.type, y, now, args.delay)
+            m = backfill_year(fetch, args.root, args.type, y, per_year[y], now, args.delay)
             flag = "OK  " if m["complete"] else "INCOMPLETE"
-            print(f"{flag} {y}: {m['unique_ids']}/{m['api_count']} ids, {m['pages']} pages")
+            print(f"{flag} {y}: {m['unique_ids']} ids in {m['records']} records, "
+                  f"api {m['api_count_before']}->{m['api_count_after']}, "
+                  f"{m['files']} files from {m['requests']} requests ({m['mode']})", flush=True)
             failed += not m["complete"]
         except Abort as e:
-            print(f"ABORT {y}: {e}", file=sys.stderr)
+            print(f"ABORT {y}: {e}", file=sys.stderr, flush=True)
             failed += 1
-        time.sleep(args.delay)
     return 1 if failed else 0
 
 
