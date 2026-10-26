@@ -297,14 +297,14 @@ def make_fetch(ua: str, opener=urllib.request.urlopen, sleep=time.sleep, attempt
 
 
 def probe_counts(fetch, ctype: str, years: list[int], delay: float, sleep=time.sleep) -> tuple[int, dict[int, int]]:
-    _, first = fetch(list_url(ctype, 0))
+    total = count_of(fetch, ctype)
     per_year = {}
     for y in years:
         sleep(delay)
-        _, page = fetch(list_url(ctype, 0, y))
-        if page["count"]:
-            per_year[y] = page["count"]
-    return first["count"], per_year
+        n = count_of(fetch, ctype, year=y)
+        if n:
+            per_year[y] = n
+    return total, per_year
 
 
 def backfill_partition(fetch, root: Path, ctype: str, year: int, now: dt.datetime,
