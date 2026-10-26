@@ -194,8 +194,10 @@ def part_path(fetch_dir: Path, unit: dt.date | None) -> Path:
     return Path(fetch_dir) / f"part={unit.isoformat() if unit else 'all'}.json"
 
 
-def count_of(fetch, ctype, **filters):
-    return -1
+def count_of(fetch, ctype: str, **filters) -> int:
+    """The API's count for a filter, fetching a single record to learn it."""
+    _, page = fetch(v2_url(ctype, per_page=1, **filters))
+    return page["count"]
 
 
 def backfill_year(fetch, root, ctype, year, count_before, now, delay, sleep=time.sleep):
