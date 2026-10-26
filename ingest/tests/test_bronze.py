@@ -279,6 +279,82 @@ def main():
     check("probe_counts asks for one record each time",
           bool(pmg.urls) and all("per_page=1" in x for x in pmg.urls), True)
 
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+
+        # small year: one request, one file
+        pmg = FakePMG(recs(2010, {"12-11": 2, "12-31": 4}))
+        m = b.backfill_year(pmg.fetch, root, ct, 2010, 6, NOW, 0, **NOSLEEP)
+        fdir = root / ct / "year=2010" / "fetched=20261026T093000Z"
+        check("small year: complete, mode all", (get(m, "complete"), get(m, "mode")), (True, "all"))
+        check("small year: one data file", sorted(p.name for p in fdir.glob("part=*.json")), ["part=all.json"])
+        check("small year: fetch + closing count = 2 requests", len(pmg.urls), 2)
+
+        # big year: one request per day, files only for days with records
+        big = recs(2025, {"01-02": 300, "06-06": 157, "12-31": 100})
+        pmg = FakePMG(big)
+        m = b.backfill_year(pmg.fetch, root, ct, 2025, len(big), NOW, 0, **NOSLEEP)
+        fdir = root / ct / "year=2025" / "fetched=20261026T093000Z"
+        check("big year: complete, mode day", (get(m, "complete"), get(m, "mode")), (True, "day"))
+        check("big year: a request per calendar day", get(m, "requests"), 365)
+        check("big year: files only for non-empty days",
+              sorted(p.name for p in fdir.glob("part=*.json")),
+              ["part=2025-01-02.json", "part=2025-06-06.json", "part=2025-12-31.json"])
+        qs = [dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(x).query)) for x in pmg.urls[:-1]]
+        check("big year: every data request is date-filtered, none paged",
+              len(qs) == 365 and all("filter[date]" in q and "page" not in q for q in qs), True)
+        check("big year: marker readable", get(b.read_marker(fdir), "unique_ids"), 557)
+        check("big year: latest_complete finds it", get(b.latest_complete(root, ct, 2025), "api_count_after"), 557)
+        check("big year: no tmp files left", (fdir.is_dir(), list(fdir.glob("*.tmp"))), (True, []))
+
+        # current year stops at today
+        cur = recs(2026, {"01-07": 165, "10-22": 400})
+        m = b.backfill_year(FakePMG(cur).fetch, root, ct, 2026, len(cur), NOW, 0, **NOSLEEP)
+        check("current year: days up to today only, complete",
+              (get(m, "requests"), get(m, "complete")), (299, True))
+        check("refuses to overwrite an existing fetch",
+              raises(b.Abort, lambda: b.backfill_year(FakePMG(cur).fetch, root, ct, 2026, len(cur), NOW, 0,
+                                                      **NOSLEEP)), True)
+
+        later = NOW + dt.timedelta(hours=1)
+
+        # a day bigger than one page aborts instead of paging, and leaves no marker
+        huge = recs(2024, {"02-01": 501, "02-02": 10})
+        pmg = FakePMG(huge)
+        check("day over 500 aborts",
+              raises(b.Abort, lambda: b.backfill_year(pmg.fetch, root, ct, 2024, len(huge), later, 0, **NOSLEEP)),
+              True)
+        check("aborted fetch stopped at the oversized day", "2024-02-01" in (pmg.urls or [""])[-1], True)
+        check("aborted fetch is not complete", b.latest_complete(root, ct, 2024), None)
+
+        # a record added mid-run: the count moves, so the year is incomplete
+        base = recs(2023, {"03-01": 300, "03-02": 300})
+        extra = [{"id": 1, "year": 2023, "date": "2023-01-01"}]
+        m = b.backfill_year(FakePMG(base, after_first=extra).fetch, root, ct, 2023, len(base), later, 0, **NOSLEEP)
+        check("record added mid-run: count moved, incomplete",
+              (get(m, "api_count_before"), get(m, "api_count_after"), get(m, "complete")), (600, 601, False))
+
+        # a record whose year field and date disagree is missed by the day walk, and caught
+        odd = recs(2022, {"05-05": 300, "05-06": 300}) + [{"id": 2, "year": 2022, "date": "2021-12-31"}]
+        m = b.backfill_year(FakePMG(odd).fetch, root, ct, 2022, len(odd), later, 0, **NOSLEEP)
+        check("year/date mismatch: shortfall visible, incomplete",
+              (get(m, "unique_ids"), get(m, "api_count_after"), get(m, "complete")), (600, 601, False))
+
+        # a duplicated id leaves a record missing (the 0.1 failure)
+        dup = recs(2021, {"04-01": 300, "04-02": 300})
+        dup[-1] = {**dup[-1], "id": dup[0]["id"]}
+        m = b.backfill_year(FakePMG(dup).fetch, root, ct, 2021, len(dup), later, 0, **NOSLEEP)
+        check("duplicate id: unique ids short of count, incomplete",
+              (get(m, "unique_ids"), get(m, "api_count_after"), get(m, "complete")), (599, 600, False))
+
+        # one record served on two days while the count is right: every id present, but not clean
+        twice = recs(2020, {"04-01": 300, "04-02": 300})
+        twice.append({**twice[0], "date": "2020-04-03"})
+        m = b.backfill_year(FakePMG(twice, count_unique=True).fetch, root, ct, 2020, 600, later, 0, **NOSLEEP)
+        check("record served twice: ids == count but records exceed it, incomplete",
+              (get(m, "unique_ids"), get(m, "records"), get(m, "api_count_after"), get(m, "complete")),
+              (600, 601, 600, False))
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 
