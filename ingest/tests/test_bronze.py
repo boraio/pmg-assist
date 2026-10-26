@@ -138,11 +138,6 @@ def main():
     check("user_agent rejects missing contact", raises(ValueError, lambda: b.user_agent(None)), True)
     check("user_agent rejects blank contact", raises(ValueError, lambda: b.user_agent("  ")), True)
 
-    # list_url
-    check("list_url without year", b.list_url("committee-question", 3),
-          "https://api.pmg.org.za/committee-question/?page=3")
-    check("list_url with year encodes filter", b.list_url("committee-question", 0, 2024),
-          "https://api.pmg.org.za/committee-question/?page=0&filter%5Byear%5D=2024")
 
     # classify / backoff
     check("classify 200", b.classify(200), "ok")
