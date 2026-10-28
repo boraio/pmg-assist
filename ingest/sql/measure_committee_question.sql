@@ -1,37 +1,48 @@
 -- Measure bronze committee-question before designing silver.
 -- Run from the repo root:  duckdb < ingest/sql/measure_committee_question.sql
 --
--- UNTESTED: written without a DuckDB to run it against. Expect to fix syntax
--- on the first run. Paste the output back, errors included.
+-- Reads only fetches whose _marker.json says complete (bronze 0.2 layout,
+-- part=*.json). 0.1 fetches (page=*.json) are not read: move them aside.
 --
 -- `results` is read as JSON rather than an inferred struct, following the
 -- ghpulse lesson: inferring one struct over drifting records is fragile.
 -- hive_partitioning=false also follows ghpulse; partitions come from the filename.
 
-CREATE OR REPLACE TEMP VIEW pages AS
+CREATE OR REPLACE TEMP VIEW markers AS
 SELECT
-    filename,
     regexp_extract(filename, 'year=([0-9]+)', 1)::INT AS part_year,
     regexp_extract(filename, 'fetched=([0-9TZ]+)', 1)  AS fetched,
-    "count"                                            AS api_count,
+    complete
+FROM read_json(
+    'data/bronze/committee-question/year=*/fetched=*/_marker.json',
+    columns = {'complete': 'BOOLEAN'},
+    filename = true,
+    hive_partitioning = false
+);
+
+-- The newest complete fetch of each year.
+CREATE OR REPLACE TEMP VIEW chosen AS
+SELECT part_year, max(fetched) AS fetched FROM markers WHERE complete GROUP BY part_year;
+
+CREATE OR REPLACE TEMP VIEW pages AS
+SELECT
+    regexp_extract(filename, 'year=([0-9]+)', 1)::INT AS part_year,
+    regexp_extract(filename, 'fetched=([0-9TZ]+)', 1)  AS fetched,
     results
 FROM read_json(
-    'data/bronze/committee-question/year=*/fetched=*/page=*.json',
+    'data/bronze/committee-question/year=*/fetched=*/part=*.json',
     columns = {'count': 'BIGINT', 'next': 'VARCHAR', 'results': 'JSON[]'},
     filename = true,
     hive_partitioning = false,
     maximum_object_size = 268435456
 );
 
--- Only the newest fetch of each year that has a complete marker is used.
--- Markers are not read here, so this takes the newest fetch per year:
--- run it only after the backfill prints OK for every year.
 CREATE OR REPLACE TEMP VIEW recs AS
-WITH latest AS (
-    SELECT part_year, max(fetched) AS fetched FROM pages GROUP BY part_year
-)
 SELECT p.part_year, unnest(p.results) AS r
-FROM pages p JOIN latest l USING (part_year, fetched);
+FROM pages p JOIN chosen c USING (part_year, fetched);
+
+.print '== years with a complete fetch (should be every year the backfill reported OK)'
+SELECT count(*) AS complete_years, min(part_year) AS first, max(part_year) AS last FROM chosen;
 
 CREATE OR REPLACE TEMP TABLE cq AS
 SELECT
