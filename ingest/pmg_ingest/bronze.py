@@ -1,22 +1,31 @@
-"""Bronze backfill: raw PMG API list pages, written unchanged to disk.
+"""Bronze backfill: raw PMG API responses, written unchanged to disk.
 
-Layout, one immutable directory per fetch of a partition:
+Layout, one immutable directory per fetch of a year:
 
-    <root>/<type>/year=<YYYY>/fetched=<YYYYMMDDTHHMMSSZ>/page=<NNNNN>.json
+    <root>/<type>/year=<YYYY>/fetched=<YYYYMMDDTHHMMSSZ>/part=<all|YYYY-MM-DD>.json
     <root>/<type>/year=<YYYY>/fetched=<...>/_marker.json
 
-Why partition by year: list pages are ordered newest first, so a record added
-mid-run shifts every page boundary after it. A year filter makes past years
-stable. The current year is always refetched whole, and each fetch lands in
-its own `fetched=` directory, so nothing is ever overwritten or deleted.
-Silver reads the latest complete fetch per year.
+Why no paging. PMG orders committee questions by `date desc` alone and pages
+with LIMIT/OFFSET (pmg/api/v1.py `paginate_request_query`). Questions that
+share a date have no stable order between requests, so paging through a year
+served some records twice and others never: the 0.1 backfill fetched 41,119
+rows holding only 39,299 distinct ids. So every request here fits on one page:
 
-Why a marker: a partition counts as done only when the number of unique
-record ids fetched equals the API's own `count` for that year.
+- the v2 endpoint allows per_page up to 500 (verified live 2026-10-26);
+- a year with <= 500 records is fetched in one request (`part=all`);
+- a bigger year is fetched one calendar day at a time with `filter[date]`
+  (verified live; the busiest day seen had 165 records). A day that does not
+  fit on one page aborts the year rather than paging.
 
-Stdlib only, so it runs anywhere Python 3.12 does. Network calls need
-PMG_INGEST_CONTACT (an email or URL), which goes into the User-Agent so PMG
-can see who is calling and reach the operator.
+Why a marker: a year counts as done only when the records fetched contain no
+duplicate ids and their number equals the API's count for that year, read
+again after the fetch. For the current year a question added mid-run makes
+the fetch incomplete, and the next run fetches the year again into a new
+`fetched=` directory. Nothing is overwritten or deleted. Silver reads the
+newest complete fetch of each year.
+
+Stdlib only. Network calls need PMG_INGEST_CONTACT (an email or URL), which
+goes into the User-Agent so PMG can see who is calling and reach the operator.
 """
 
 from __future__ import annotations
