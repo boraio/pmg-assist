@@ -61,7 +61,8 @@ SELECT
     r->>'answer'                       AS answer_html,
     -- crude tag strip, enough to measure; silver does this properly
     trim(regexp_replace(coalesce(r->>'answer', ''), '<[^>]+>|&nbsp;', ' ', 'g')) AS answer_text,
-    (r->'source_file') IS NOT NULL AND (r->>'source_file') <> 'null' AS has_source_file
+    (r->'source_file') IS NOT NULL AND (r->>'source_file') <> 'null' AS has_source_file,
+    json_array_length(coalesce(r->'files', '[]'::JSON)) AS n_files
 FROM recs;
 
 .print '== totals: rows vs distinct ids (should be equal)'
