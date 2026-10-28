@@ -52,7 +52,7 @@ SELECT
     (r->>'date')::DATE                 AS date,
     (r->>'year')::INT                  AS year,
     r->>'answer_type'                  AS answer_type,
-    r->'house'->>'name_short'          AS house,
+    (r->>'house_id')::INT              AS house_id,
     (r->>'minister_id')::BIGINT        AS minister_id,
     r->>'question_to_name'             AS question_to_name,
     r->>'asked_by_name'                AS asked_by_name,
