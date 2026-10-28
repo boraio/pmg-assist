@@ -33,7 +33,7 @@ import urllib.request
 from pathlib import Path
 
 API = "https://api.pmg.org.za"
-VERSION = "0.1"
+VERSION = "0.2"
 
 # 0.2: the v2 endpoint, never paged (see the module docstring).
 SOURCES = {"committee-question": "/v2/minister-questions/"}
