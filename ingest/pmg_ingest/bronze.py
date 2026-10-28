@@ -126,8 +126,6 @@ def partition_dir(root: Path, ctype: str, year: int) -> Path:
     return Path(root) / ctype / f"year={year}"
 
 
-def page_path(fetch_dir: Path, page: int) -> Path:
-    return fetch_dir / f"page={page:05d}.json"
 
 
 def latest_complete(root: Path, ctype: str, year: int) -> dict | None:
