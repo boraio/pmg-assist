@@ -307,46 +307,6 @@ def probe_counts(fetch, ctype: str, years: list[int], delay: float, sleep=time.s
     return total, per_year
 
 
-def backfill_partition(fetch, root: Path, ctype: str, year: int, now: dt.datetime,
-                       delay: float, sleep=time.sleep) -> dict:
-    fdir = partition_dir(root, ctype, year) / f"fetched={fetch_stamp(now)}"
-    if fdir.exists():
-        raise Abort(f"{fdir} already exists; refusing to overwrite a fetch")
-    ids: set = set()
-    records = 0
-    page = 0
-    api_count = None
-    max_pages = None
-    while True:
-        raw, data = fetch(list_url(ctype, page, year))
-        if api_count is None:
-            api_count = data["count"]
-            # Guard against a `next` that never goes null.
-            max_pages = math.ceil(api_count / PAGE_SIZE) + 5
-        write_atomic(page_path(fdir, page), raw)
-        for r in data["results"]:
-            records += 1
-            ids.add(r.get("id"))
-        if data["next"] is None:
-            break
-        page += 1
-        if page >= max_pages:
-            raise Abort(f"{ctype} {year}: still paging at {page}, expected ~{max_pages - 5}")
-        sleep(delay)
-    marker = {
-        "type": ctype,
-        "year": year,
-        "fetched_at": now.astimezone(dt.UTC).isoformat(),
-        "api_count": api_count,
-        "pages": page + 1,
-        "records": records,
-        "unique_ids": len(ids),
-        "complete": len(ids) == api_count,
-        "ingest_version": VERSION,
-    }
-    # Marker is written after the data, so a crash leaves an incomplete fetch, never a false "complete".
-    write_atomic(fdir / "_marker.json", json.dumps(marker, indent=2).encode())
-    return marker
 
 
 # ------------------------------------------------------------------- CLI
