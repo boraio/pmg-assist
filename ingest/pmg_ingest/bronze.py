@@ -57,11 +57,6 @@ def user_agent(contact: str | None) -> str:
     return f"pmg-assist-ingest/{VERSION} (+{contact.strip()})"
 
 
-def list_url(ctype: str, page: int, year: int | None = None) -> str:
-    query: dict[str, int] = {"page": page}
-    if year is not None:
-        query["filter[year]"] = year
-    return f"{API}/{ctype}/?{urllib.parse.urlencode(query)}"
 
 
 def classify(status: int | None) -> str:
