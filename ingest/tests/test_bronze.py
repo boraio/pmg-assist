@@ -61,16 +61,6 @@ def page(ids, count, nxt):
     return {"count": count, "next": nxt, "results": [{"id": i} for i in ids]}
 
 
-def fake_fetch(pages):
-    """fetch for backfill: returns pages in order regardless of URL; records URLs."""
-    urls = []
-
-    def fetch(url):
-        urls.append(url)
-        p = pages.pop(0)
-        return json.dumps(p).encode(), p
-
-    return fetch, urls
 
 
 class FakePMG:
