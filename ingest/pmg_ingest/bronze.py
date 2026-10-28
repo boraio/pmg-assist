@@ -34,9 +34,6 @@ import urllib.request
 from pathlib import Path
 
 API = "https://api.pmg.org.za"
-PAGE_SIZE = 50  # documented in OpenUpSA/pmg-cms-2 API.md
-# Types known to carry a `year` field. Others are added after their shape is checked.
-YEAR_PARTITIONED = {"committee-question"}
 VERSION = "0.1"
 
 # 0.2: the v2 endpoint, never paged (see the module docstring).
