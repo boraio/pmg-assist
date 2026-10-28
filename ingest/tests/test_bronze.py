@@ -124,7 +124,7 @@ NOW = dt.datetime(2026, 10, 26, 9, 30, tzinfo=dt.UTC)
 
 def main():
     # user_agent
-    check("user_agent includes contact", b.user_agent("me@example.org"), "pmg-assist-ingest/0.1 (+me@example.org)")
+    check("user_agent includes contact", b.user_agent("me@example.org"), "pmg-assist-ingest/0.2 (+me@example.org)")
     check("user_agent rejects missing contact", raises(ValueError, lambda: b.user_agent(None)), True)
     check("user_agent rejects blank contact", raises(ValueError, lambda: b.user_agent("  ")), True)
 
