@@ -108,8 +108,8 @@ SELECT count(*) AS codes_reused FROM (
     SELECT code FROM cq GROUP BY code HAVING count(DISTINCT year) > 1
 );
 
-.print '== answer type and house'
-SELECT answer_type, house, count(*) AS n FROM cq GROUP BY ALL ORDER BY n DESC;
+.print '== answer type and house (house_id: v2 returns the id, not the nested house)'
+SELECT answer_type, house_id, count(*) AS n FROM cq GROUP BY ALL ORDER BY n DESC;
 
 .print '== addressee names per minister_id (more than one name = portfolio renamed or reshuffled)'
 SELECT minister_id, count(DISTINCT question_to_name) AS names,
