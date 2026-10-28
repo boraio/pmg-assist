@@ -116,3 +116,13 @@ SELECT minister_id, count(DISTINCT question_to_name) AS names,
        string_agg(DISTINCT question_to_name, ' | ') AS as_recorded
 FROM cq GROUP BY minister_id HAVING count(DISTINCT question_to_name) > 1
 ORDER BY names DESC LIMIT 15;
+
+.print '== attachments per record'
+SELECT n_files, count(*) AS n FROM cq GROUP BY n_files ORDER BY n_files;
+
+.print '== the longest replies: what makes a reply millions of characters?'
+SELECT id, date, length(answer_html) AS html_chars, length(answer_text) AS text_chars,
+       regexp_matches(answer_html, '<img[^>]+src="data:') AS inline_image,
+       regexp_matches(answer_html, '<table') AS has_table,
+       left(regexp_replace(answer_text, '\s+', ' ', 'g'), 120) AS starts
+FROM cq ORDER BY length(answer_html) DESC LIMIT 5;
