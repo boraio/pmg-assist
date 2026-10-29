@@ -1,0 +1,42 @@
+# Runs on the cluster's ARC runners (arc-runner-set, registered for the whole
+# boraio organisation), as ghpulse does.
+#
+# Offline only: CI validates the code, not the data. Nothing here calls PMG or
+# touches object storage. These are the checks `make check` runs; the Makefile
+# itself is not used because the runner image is not known to have make.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: arc-runner-set
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install
+        run: pip install --quiet -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check ingest api
+
+      - name: Compile
+        run: python -m compileall -q ingest
+
+      - name: Offline checks
+        run: python ingest/tests/test_bronze.py
+
+      - name: API contract
+        run: >-
+          python -c "from openapi_spec_validator import validate;
+          from openapi_spec_validator.readers import read_from_filename;
+          validate(read_from_filename('docs/api.openapi.yaml')[0]); print('spec valid')"
