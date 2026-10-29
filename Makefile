@@ -31,6 +31,10 @@ spec:   ## validate the API contract
 
 check: lint test spec   ## all offline checks
 
+# ---- API (Milestone 0 stub). Port 8077: 8000 is taken on the dev machine.
+api:    ## run the API locally on :8077 with reload
+	$(VENV)/bin/uvicorn pmg_api.main:app --app-dir api --port 8077 --reload
+
 # ---- O: obtain (network; needs PMG_INGEST_CONTACT; never run in parallel against PMG)
 bronze-status:   ## API counts per year vs local state; writes nothing
 	$(INGEST) --status
