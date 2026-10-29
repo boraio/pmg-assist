@@ -303,6 +303,16 @@ def main():
               (get(m, "unique_ids"), get(m, "records"), get(m, "api_count_after"), get(m, "complete")),
               (600, 601, 600, False))
 
+    # a complete marker from another layout version is not trusted
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        old = b.partition_dir(root, ct, 2010) / "fetched=20261026T102343Z"
+        b.write_atomic(old / "_marker.json", json.dumps({"complete": True, "ingest_version": "0.1"}).encode())
+        check("latest_complete ignores a 0.1 marker", b.latest_complete(root, ct, 2010), None)
+        new = b.partition_dir(root, ct, 2011) / "fetched=20261029T090000Z"
+        b.write_atomic(new / "_marker.json", json.dumps({"complete": True, "ingest_version": "0.2"}).encode())
+        check("latest_complete accepts a 0.2 marker", get(b.latest_complete(root, ct, 2011), "ingest_version"), "0.2")
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 
