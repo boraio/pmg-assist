@@ -9,7 +9,7 @@ PY     := $(VENV)/bin/python
 BRONZE := data/bronze
 INGEST := PYTHONPATH=ingest $(PY) -m pmg_ingest.bronze --root $(BRONZE)
 
-.PHONY: help venv lint test spec check bronze-status bronze-plan bronze measure
+.PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure
 
 help:   ## list targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
