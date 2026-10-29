@@ -138,7 +138,7 @@ def latest_complete(root: Path, ctype: str, year: int) -> dict | None:
         return None
     for fdir in sorted(pdir.glob("fetched=*"), reverse=True):
         m = read_marker(fdir)
-        if m and m.get("complete"):
+        if m and m.get("complete") and m.get("ingest_version") in LAYOUT_VERSIONS:
             return m
     return None
 
