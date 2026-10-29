@@ -48,6 +48,10 @@ VERSION = "0.2"
 SOURCES = {"committee-question": "/v2/minister-questions/"}
 PER_PAGE = 500  # v2's maximum (pmg-cms-2 config RESULTS_PER_PAGE_V2)
 
+# Marker versions written in the current layout. latest_complete trusts no other:
+# a 0.1 marker can say complete while its files are page=*.json, which 0.2 never reads.
+LAYOUT_VERSIONS = {"0.2"}
+
 
 class Abort(Exception):
     """A failure that retrying will not fix."""
@@ -134,7 +138,7 @@ def latest_complete(root: Path, ctype: str, year: int) -> dict | None:
         return None
     for fdir in sorted(pdir.glob("fetched=*"), reverse=True):
         m = read_marker(fdir)
-        if m and m.get("complete"):
+        if m and m.get("complete") and m.get("ingest_version") in LAYOUT_VERSIONS:
             return m
     return None
 
