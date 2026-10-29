@@ -9,7 +9,7 @@ PY     := $(VENV)/bin/python
 BRONZE := data/bronze
 INGEST := PYTHONPATH=ingest $(PY) -m pmg_ingest.bronze --root $(BRONZE)
 
-.PHONY: help venv lint test spec check bronze-status bronze-plan bronze measure
+.PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure
 
 help:   ## list targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -24,11 +24,16 @@ lint:   ## ruff over the Python code
 
 test:   ## offline checks
 	$(PY) ingest/tests/test_bronze.py
+	$(PY) -m pytest api/tests -q
 
 spec:   ## validate the API contract
 	$(PY) -c "from openapi_spec_validator import validate; from openapi_spec_validator.readers import read_from_filename; validate(read_from_filename('docs/api.openapi.yaml')[0]); print('spec valid')"
 
 check: lint test spec   ## all offline checks
+
+# ---- API (Milestone 0 stub). Port 8077: 8000 is taken on the dev machine.
+api:    ## run the API locally on :8077 with reload
+	$(VENV)/bin/uvicorn pmg_api.main:app --app-dir api --port 8077 --reload
 
 # ---- O: obtain (network; needs PMG_INGEST_CONTACT; never run in parallel against PMG)
 bronze-status:   ## API counts per year vs local state; writes nothing
