@@ -129,3 +129,87 @@ def test_stub_matches_spec_examples():
         want = copy.deepcopy(examples[name]["value"])
         want.pop("response_id")
         assert body == want, name
+
+# ------------------------------------------------------------ query: errors
+
+
+def problem_ok(r, status, code):
+    assert r.status_code == status
+    assert r.headers["content-type"].startswith("application/problem+json")
+    body = r.json()
+    assert errors("Problem", body) == []
+    assert body["code"] == code
+    assert body["status"] == status
+    return body
+
+
+def test_missing_client_version_is_422_problem():
+    r = client().post("/v1/query", json={"question": "q"})
+    problem_ok(r, 422, "invalid_request")
+
+
+def test_malformed_client_version_is_422_problem():
+    r = client().post("/v1/query", json={"question": "q"}, headers={"PMG-Client-Version": "web/1"})
+    problem_ok(r, 422, "invalid_request")
+
+
+def test_empty_question_is_422_problem():
+    r = client().post("/v1/query", json={"question": ""}, headers=HEADERS)
+    problem_ok(r, 422, "invalid_request")
+
+
+def test_question_too_long_is_422_problem():
+    r = client().post("/v1/query", json={"question": "x" * 1001}, headers=HEADERS)
+    problem_ok(r, 422, "invalid_request")
+
+
+def test_question_at_limit_is_accepted():
+    r = client().post("/v1/query", json={"question": "x" * 1000}, headers=HEADERS)
+    assert r.status_code == 200
+
+
+def test_too_much_history_is_422_problem():
+    req = {"question": "q", "history": [{"question": "h"}] * 11}
+    r = client().post("/v1/query", json=req, headers=HEADERS)
+    problem_ok(r, 422, "invalid_request")
+
+
+def test_old_client_gets_426_with_minimum():
+    r = client(min_client_version="1.2.0").post(
+        "/v1/query", json={"question": "q"}, headers={"PMG-Client-Version": "android/1.1.9"}
+    )
+    body = problem_ok(r, 426, "upgrade_required")
+    assert errors("UpgradeRequiredProblem", body) == []
+    assert body["minimum_client_version"] == "1.2.0"
+
+
+def test_minimum_client_is_served():
+    r = client(min_client_version="1.2.0").post(
+        "/v1/query", json={"question": "q"}, headers={"PMG-Client-Version": "ios/1.2.0"}
+    )
+    assert r.status_code == 200
+
+
+def test_version_compare_is_numeric_not_lexical():
+    r = client(min_client_version="1.2.0").post(
+        "/v1/query", json={"question": "q"}, headers={"PMG-Client-Version": "ios/1.10.0"}
+    )
+    assert r.status_code == 200
+
+
+def test_bad_minimum_version_fails_at_startup():
+    with pytest.raises(ValueError):
+        create_app(min_client_version="1.2")
+
+
+def test_unhandled_error_is_500_problem_without_detail():
+    app = create_app()
+
+    @app.get("/v1/boom")
+    def boom():
+        raise RuntimeError("secret internals")
+
+    r = TestClient(app, raise_server_exceptions=False).get("/v1/boom")
+    body = problem_ok(r, 500, "internal_error")
+    assert "secret" not in r.text
+    assert "detail" not in body
