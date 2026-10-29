@@ -24,6 +24,7 @@ lint:   ## ruff over the Python code
 
 test:   ## offline checks
 	$(PY) ingest/tests/test_bronze.py
+	$(PY) -m pytest api/tests -q
 
 spec:   ## validate the API contract
 	$(PY) -c "from openapi_spec_validator import validate; from openapi_spec_validator.readers import read_from_filename; validate(read_from_filename('docs/api.openapi.yaml')[0]); print('spec valid')"
