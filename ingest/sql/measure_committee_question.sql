@@ -1,37 +1,48 @@
 -- Measure bronze committee-question before designing silver.
 -- Run from the repo root:  duckdb < ingest/sql/measure_committee_question.sql
 --
--- UNTESTED: written without a DuckDB to run it against. Expect to fix syntax
--- on the first run. Paste the output back, errors included.
+-- Reads only fetches whose _marker.json says complete (bronze 0.2 layout,
+-- part=*.json). 0.1 fetches (page=*.json) are not read: move them aside.
 --
 -- `results` is read as JSON rather than an inferred struct, following the
 -- ghpulse lesson: inferring one struct over drifting records is fragile.
 -- hive_partitioning=false also follows ghpulse; partitions come from the filename.
 
-CREATE OR REPLACE TEMP VIEW pages AS
+CREATE OR REPLACE TEMP VIEW markers AS
 SELECT
-    filename,
     regexp_extract(filename, 'year=([0-9]+)', 1)::INT AS part_year,
     regexp_extract(filename, 'fetched=([0-9TZ]+)', 1)  AS fetched,
-    "count"                                            AS api_count,
+    complete
+FROM read_json(
+    'data/bronze/committee-question/year=*/fetched=*/_marker.json',
+    columns = {'complete': 'BOOLEAN'},
+    filename = true,
+    hive_partitioning = false
+);
+
+-- The newest complete fetch of each year.
+CREATE OR REPLACE TEMP VIEW chosen AS
+SELECT part_year, max(fetched) AS fetched FROM markers WHERE complete GROUP BY part_year;
+
+CREATE OR REPLACE TEMP VIEW pages AS
+SELECT
+    regexp_extract(filename, 'year=([0-9]+)', 1)::INT AS part_year,
+    regexp_extract(filename, 'fetched=([0-9TZ]+)', 1)  AS fetched,
     results
 FROM read_json(
-    'data/bronze/committee-question/year=*/fetched=*/page=*.json',
+    'data/bronze/committee-question/year=*/fetched=*/part=*.json',
     columns = {'count': 'BIGINT', 'next': 'VARCHAR', 'results': 'JSON[]'},
     filename = true,
     hive_partitioning = false,
     maximum_object_size = 268435456
 );
 
--- Only the newest fetch of each year that has a complete marker is used.
--- Markers are not read here, so this takes the newest fetch per year:
--- run it only after the backfill prints OK for every year.
 CREATE OR REPLACE TEMP VIEW recs AS
-WITH latest AS (
-    SELECT part_year, max(fetched) AS fetched FROM pages GROUP BY part_year
-)
 SELECT p.part_year, unnest(p.results) AS r
-FROM pages p JOIN latest l USING (part_year, fetched);
+FROM pages p JOIN chosen c USING (part_year, fetched);
+
+.print '== years with a complete fetch (should be every year the backfill reported OK)'
+SELECT count(*) AS complete_years, min(part_year) AS first, max(part_year) AS last FROM chosen;
 
 CREATE OR REPLACE TEMP TABLE cq AS
 SELECT
@@ -41,7 +52,7 @@ SELECT
     (r->>'date')::DATE                 AS date,
     (r->>'year')::INT                  AS year,
     r->>'answer_type'                  AS answer_type,
-    r->'house'->>'name_short'          AS house,
+    (r->>'house_id')::INT              AS house_id,
     (r->>'minister_id')::BIGINT        AS minister_id,
     r->>'question_to_name'             AS question_to_name,
     r->>'asked_by_name'                AS asked_by_name,
@@ -50,7 +61,8 @@ SELECT
     r->>'answer'                       AS answer_html,
     -- crude tag strip, enough to measure; silver does this properly
     trim(regexp_replace(coalesce(r->>'answer', ''), '<[^>]+>|&nbsp;', ' ', 'g')) AS answer_text,
-    (r->'source_file') IS NOT NULL AND (r->>'source_file') <> 'null' AS has_source_file
+    (r->'source_file') IS NOT NULL AND (r->>'source_file') <> 'null' AS has_source_file,
+    json_array_length(coalesce(r->'files', '[]'::JSON)) AS n_files
 FROM recs;
 
 .print '== totals: rows vs distinct ids (should be equal)'
@@ -96,11 +108,21 @@ SELECT count(*) AS codes_reused FROM (
     SELECT code FROM cq GROUP BY code HAVING count(DISTINCT year) > 1
 );
 
-.print '== answer type and house'
-SELECT answer_type, house, count(*) AS n FROM cq GROUP BY ALL ORDER BY n DESC;
+.print '== answer type and house (house_id: v2 returns the id, not the nested house)'
+SELECT answer_type, house_id, count(*) AS n FROM cq GROUP BY ALL ORDER BY n DESC;
 
 .print '== addressee names per minister_id (more than one name = portfolio renamed or reshuffled)'
 SELECT minister_id, count(DISTINCT question_to_name) AS names,
        string_agg(DISTINCT question_to_name, ' | ') AS as_recorded
 FROM cq GROUP BY minister_id HAVING count(DISTINCT question_to_name) > 1
 ORDER BY names DESC LIMIT 15;
+
+.print '== attachments per record'
+SELECT n_files, count(*) AS n FROM cq GROUP BY n_files ORDER BY n_files;
+
+.print '== the longest replies: what makes a reply millions of characters?'
+SELECT id, date, length(answer_html) AS html_chars, length(answer_text) AS text_chars,
+       regexp_matches(answer_html, '<img[^>]+src="data:') AS inline_image,
+       regexp_matches(answer_html, '<table') AS has_table,
+       left(regexp_replace(answer_text, '\s+', ' ', 'g'), 120) AS starts
+FROM cq ORDER BY length(answer_html) DESC LIMIT 5;

@@ -1,22 +1,31 @@
-"""Bronze backfill: raw PMG API list pages, written unchanged to disk.
+"""Bronze backfill: raw PMG API responses, written unchanged to disk.
 
-Layout, one immutable directory per fetch of a partition:
+Layout, one immutable directory per fetch of a year:
 
-    <root>/<type>/year=<YYYY>/fetched=<YYYYMMDDTHHMMSSZ>/page=<NNNNN>.json
+    <root>/<type>/year=<YYYY>/fetched=<YYYYMMDDTHHMMSSZ>/part=<all|YYYY-MM-DD>.json
     <root>/<type>/year=<YYYY>/fetched=<...>/_marker.json
 
-Why partition by year: list pages are ordered newest first, so a record added
-mid-run shifts every page boundary after it. A year filter makes past years
-stable. The current year is always refetched whole, and each fetch lands in
-its own `fetched=` directory, so nothing is ever overwritten or deleted.
-Silver reads the latest complete fetch per year.
+Why no paging. PMG orders committee questions by `date desc` alone and pages
+with LIMIT/OFFSET (pmg/api/v1.py `paginate_request_query`). Questions that
+share a date have no stable order between requests, so paging through a year
+served some records twice and others never: the 0.1 backfill fetched 41,119
+rows holding only 39,299 distinct ids. So every request here fits on one page:
 
-Why a marker: a partition counts as done only when the number of unique
-record ids fetched equals the API's own `count` for that year.
+- the v2 endpoint allows per_page up to 500 (verified live 2026-10-26);
+- a year with <= 500 records is fetched in one request (`part=all`);
+- a bigger year is fetched one calendar day at a time with `filter[date]`
+  (verified live; the busiest day seen had 165 records). A day that does not
+  fit on one page aborts the year rather than paging.
 
-Stdlib only, so it runs anywhere Python 3.12 does. Network calls need
-PMG_INGEST_CONTACT (an email or URL), which goes into the User-Agent so PMG
-can see who is calling and reach the operator.
+Why a marker: a year counts as done only when the records fetched contain no
+duplicate ids and their number equals the API's count for that year, read
+again after the fetch. For the current year a question added mid-run makes
+the fetch incomplete, and the next run fetches the year again into a new
+`fetched=` directory. Nothing is overwritten or deleted. Silver reads the
+newest complete fetch of each year.
+
+Stdlib only. Network calls need PMG_INGEST_CONTACT (an email or URL), which
+goes into the User-Agent so PMG can see who is calling and reach the operator.
 """
 
 from __future__ import annotations
@@ -24,7 +33,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import math
 import os
 import sys
 import time
@@ -34,10 +42,11 @@ import urllib.request
 from pathlib import Path
 
 API = "https://api.pmg.org.za"
-PAGE_SIZE = 50  # documented in OpenUpSA/pmg-cms-2 API.md
-# Types known to carry a `year` field. Others are added after their shape is checked.
-YEAR_PARTITIONED = {"committee-question"}
-VERSION = "0.1"
+VERSION = "0.2"
+
+# 0.2: the v2 endpoint, never paged (see the module docstring).
+SOURCES = {"committee-question": "/v2/minister-questions/"}
+PER_PAGE = 500  # v2's maximum (pmg-cms-2 config RESULTS_PER_PAGE_V2)
 
 
 class Abort(Exception):
@@ -53,11 +62,6 @@ def user_agent(contact: str | None) -> str:
     return f"pmg-assist-ingest/{VERSION} (+{contact.strip()})"
 
 
-def list_url(ctype: str, page: int, year: int | None = None) -> str:
-    query: dict[str, int] = {"page": page}
-    if year is not None:
-        query["filter[year]"] = year
-    return f"{API}/{ctype}/?{urllib.parse.urlencode(query)}"
 
 
 def classify(status: int | None) -> str:
@@ -122,8 +126,6 @@ def partition_dir(root: Path, ctype: str, year: int) -> Path:
     return Path(root) / ctype / f"year={year}"
 
 
-def page_path(fetch_dir: Path, page: int) -> Path:
-    return fetch_dir / f"page={page:05d}.json"
 
 
 def latest_complete(root: Path, ctype: str, year: int) -> dict | None:
@@ -155,6 +157,89 @@ def plan(years: list[int], current_year: int, complete: dict[int, bool], force: 
             todo.append(y)
     return todo
 
+
+def v2_url(ctype: str, *, year: int | None = None, date: dt.date | None = None,
+           per_page: int = PER_PAGE) -> str:
+    """A v2 list URL. Never carries a page parameter: nothing in 0.2 pages."""
+    if year is not None and date is not None:
+        raise ValueError("filter by year or by date, not both")
+    query: dict[str, object] = {"per_page": per_page}
+    if year is not None:
+        query["filter[year]"] = year
+    if date is not None:
+        query["filter[date]"] = date.isoformat()
+    return f"{API}{SOURCES[ctype]}?{urllib.parse.urlencode(query)}"
+
+
+def days_in(year: int, until: dt.date) -> list[dt.date]:
+    """Every calendar day of `year`, stopping at `until` (inclusive)."""
+    first = dt.date(year, 1, 1)
+    last = min(dt.date(year, 12, 31), until)
+    return [first + dt.timedelta(days=i) for i in range((last - first).days + 1)]
+
+
+def mode_for(count: int) -> str:
+    return "all" if count <= PER_PAGE else "day"
+
+
+def requests_for(year: int, count: int, today: dt.date) -> int:
+    """Requests a year costs: the fetch itself plus the closing count check."""
+    units = 1 if mode_for(count) == "all" else len(days_in(year, today))
+    return units + 1
+
+
+def part_path(fetch_dir: Path, unit: dt.date | None) -> Path:
+    return Path(fetch_dir) / f"part={unit.isoformat() if unit else 'all'}.json"
+
+
+def count_of(fetch, ctype: str, **filters) -> int:
+    """The API's count for a filter, fetching a single record to learn it."""
+    _, page = fetch(v2_url(ctype, per_page=1, **filters))
+    return page["count"]
+
+
+def backfill_year(fetch, root: Path, ctype: str, year: int, count_before: int,
+                  now: dt.datetime, delay: float, sleep=time.sleep) -> dict:
+    fdir = partition_dir(root, ctype, year) / f"fetched={fetch_stamp(now)}"
+    if fdir.exists():
+        raise Abort(f"{fdir} already exists; refusing to overwrite a fetch")
+    mode = mode_for(count_before)
+    units: list[dt.date | None] = [None] if mode == "all" else days_in(year, now.date())
+
+    ids: set = set()
+    records = files = 0
+    for unit in units:
+        url = v2_url(ctype, year=year) if unit is None else v2_url(ctype, date=unit)
+        raw, data = fetch(url)
+        if data["next"] is not None:
+            raise Abort(f"{ctype} {unit or year}: {data['count']} records do not fit on one "
+                        f"page of {PER_PAGE}; this needs a finer partition, not paging")
+        if data["results"]:
+            write_atomic(part_path(fdir, unit), raw)
+            files += 1
+        for r in data["results"]:
+            records += 1
+            ids.add(r.get("id"))
+        sleep(delay)
+
+    count_after = count_of(fetch, ctype, year=year)
+    marker = {
+        "type": ctype,
+        "year": year,
+        "mode": mode,
+        "fetched_at": now.astimezone(dt.UTC).isoformat(),
+        "requests": len(units),
+        "files": files,
+        "api_count_before": count_before,
+        "api_count_after": count_after,
+        "records": records,
+        "unique_ids": len(ids),
+        "complete": records == len(ids) == count_after,
+        "ingest_version": VERSION,
+    }
+    # Written after the data, so a crash leaves an incomplete fetch, never a false "complete".
+    write_atomic(fdir / "_marker.json", json.dumps(marker, indent=2).encode())
+    return marker
 
 # ---------------------------------------------------------- side effects
 
@@ -210,56 +295,16 @@ def make_fetch(ua: str, opener=urllib.request.urlopen, sleep=time.sleep, attempt
 
 
 def probe_counts(fetch, ctype: str, years: list[int], delay: float, sleep=time.sleep) -> tuple[int, dict[int, int]]:
-    _, first = fetch(list_url(ctype, 0))
+    total = count_of(fetch, ctype)
     per_year = {}
     for y in years:
         sleep(delay)
-        _, page = fetch(list_url(ctype, 0, y))
-        if page["count"]:
-            per_year[y] = page["count"]
-    return first["count"], per_year
+        n = count_of(fetch, ctype, year=y)
+        if n:
+            per_year[y] = n
+    return total, per_year
 
 
-def backfill_partition(fetch, root: Path, ctype: str, year: int, now: dt.datetime,
-                       delay: float, sleep=time.sleep) -> dict:
-    fdir = partition_dir(root, ctype, year) / f"fetched={fetch_stamp(now)}"
-    if fdir.exists():
-        raise Abort(f"{fdir} already exists; refusing to overwrite a fetch")
-    ids: set = set()
-    records = 0
-    page = 0
-    api_count = None
-    max_pages = None
-    while True:
-        raw, data = fetch(list_url(ctype, page, year))
-        if api_count is None:
-            api_count = data["count"]
-            # Guard against a `next` that never goes null.
-            max_pages = math.ceil(api_count / PAGE_SIZE) + 5
-        write_atomic(page_path(fdir, page), raw)
-        for r in data["results"]:
-            records += 1
-            ids.add(r.get("id"))
-        if data["next"] is None:
-            break
-        page += 1
-        if page >= max_pages:
-            raise Abort(f"{ctype} {year}: still paging at {page}, expected ~{max_pages - 5}")
-        sleep(delay)
-    marker = {
-        "type": ctype,
-        "year": year,
-        "fetched_at": now.astimezone(dt.UTC).isoformat(),
-        "api_count": api_count,
-        "pages": page + 1,
-        "records": records,
-        "unique_ids": len(ids),
-        "complete": len(ids) == api_count,
-        "ingest_version": VERSION,
-    }
-    # Marker is written after the data, so a crash leaves an incomplete fetch, never a false "complete".
-    write_atomic(fdir / "_marker.json", json.dumps(marker, indent=2).encode())
-    return marker
 
 
 # ------------------------------------------------------------------- CLI
@@ -267,7 +312,7 @@ def backfill_partition(fetch, root: Path, ctype: str, year: int, now: dt.datetim
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--type", default="committee-question", choices=sorted(YEAR_PARTITIONED))
+    ap.add_argument("--type", default="committee-question", choices=sorted(SOURCES))
     ap.add_argument("--root", default="data/bronze", type=Path)
     ap.add_argument("--years", default=f"2000-{dt.date.today().year}")
     ap.add_argument("--delay", type=float, default=1.0, help="seconds between requests")
@@ -289,27 +334,29 @@ def main(argv: list[str] | None = None) -> int:
     for y in sorted(per_year):
         m = latest_complete(args.root, args.type, y)
         local = f"complete ({m['unique_ids']} @ {m['fetched_at']})" if m else "missing"
-        print(f"  {y}: api={per_year[y]:>6}  local={local}")
+        print(f"  {y}: api={per_year[y]:>6}  mode={mode_for(per_year[y]):<3}  local={local}")
     if args.status:
         return 0
 
     todo = plan(sorted(per_year), now.year, complete, args.force)
-    pages = sum(math.ceil(per_year[y] / PAGE_SIZE) for y in todo)
-    print(f"plan: {len(todo)} partitions, ~{pages} pages, ~{pages * args.delay / 60:.0f} min at {args.delay}s")
+    n = sum(requests_for(y, per_year[y], now.date()) for y in todo)
+    print(f"plan: {len(todo)} years, ~{n} requests, ~{n * args.delay / 60:.0f} min at {args.delay}s "
+          "(plus response time)")
     if args.dry_run:
         return 0
 
     failed = 0
     for y in todo:
         try:
-            m = backfill_partition(fetch, args.root, args.type, y, now, args.delay)
+            m = backfill_year(fetch, args.root, args.type, y, per_year[y], now, args.delay)
             flag = "OK  " if m["complete"] else "INCOMPLETE"
-            print(f"{flag} {y}: {m['unique_ids']}/{m['api_count']} ids, {m['pages']} pages")
+            print(f"{flag} {y}: {m['unique_ids']} ids in {m['records']} records, "
+                  f"api {m['api_count_before']}->{m['api_count_after']}, "
+                  f"{m['files']} files from {m['requests']} requests ({m['mode']})", flush=True)
             failed += not m["complete"]
         except Abort as e:
-            print(f"ABORT {y}: {e}", file=sys.stderr)
+            print(f"ABORT {y}: {e}", file=sys.stderr, flush=True)
             failed += 1
-        time.sleep(args.delay)
     return 1 if failed else 0
 
 

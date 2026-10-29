@@ -4,3 +4,5 @@ openai-api-key: dummy
 edit-format: diff
 show-model-warnings: false
 gitignore: false
+detect-urls: false
+auto-lint: false
