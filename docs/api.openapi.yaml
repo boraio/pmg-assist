@@ -27,8 +27,8 @@ info:
 servers:
   - url: https://api.pmg-assist.invalid
     description: Placeholder. Replace when the hosted target exists.
-  - url: http://localhost:8077
-    description: Local development (make api). Lets /docs "Try it out" reach a local server.
+  - url: /
+    description: Whichever server is serving this document (make api locally, or the same API behind a reverse proxy).
 
 tags:
   - name: query
