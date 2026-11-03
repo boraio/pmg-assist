@@ -1,0 +1,72 @@
+# pmg-assist API on VYRA, lab only (ADR 0002). Apply with:
+#   kubectl apply -f infra/k8s/pmg-api.yaml
+# The image is private on ghcr.io; the pull secret ghcr-pull is created by hand
+# in this namespace and is never committed.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pmg-assist
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pmg-api
+  namespace: pmg-assist
+  labels:
+    app: pmg-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pmg-api
+  template:
+    metadata:
+      labels:
+        app: pmg-api
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: api
+          image: ghcr.io/boraio/pmg-assist-api:main
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8077
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pmg-api
+  namespace: pmg-assist
+spec:
+  type: LoadBalancer
+  selector:
+    app: pmg-api
+  ports:
+    - name: http
+      port: 8077
+      targetPort: http
