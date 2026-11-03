@@ -1,0 +1,7 @@
+# Allowlist: the build context is only what the API image needs.
+# Without this, data/ (the bronze download) would be sent to every build.
+*
+!api/requirements.txt
+!api/pmg_api/
+!docs/api.openapi.yaml
+**/__pycache__
