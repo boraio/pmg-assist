@@ -136,7 +136,8 @@ whole path end to end before building any feature depth.
 - OpenAPI spec for `POST /query` and `GET /health`, committed and reviewed
 - FastAPI skeleton returning a hardcoded but correctly-shaped answer with
   citations
-- Deployed to the hosted target with TLS
+- Deployed with TLS to wherever ADR 0002 decision 5 points: VYRA for now.
+  The lab deploy exists (see Where things stand); TLS does not yet.
 - iOS and Android clients that call it and render the answer plus citations
 - CI: lint and test the API, build both clients
 
