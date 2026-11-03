@@ -1,0 +1,44 @@
+# Builds the API image; on main also pushes it to GitHub's registry (ghcr.io).
+#
+# Runs on a GitHub-hosted runner, not arc-runner-set: the cluster's runners have
+# no Docker engine (no dind sidecar), and adding one means privileged pods on a
+# runner set shared with other repos. Checks stay on arc-runner-set (ci.yml).
+name: image
+
+on:
+  push:
+    branches: [main]
+    paths: [api/**, docs/api.openapi.yaml, .dockerignore, .github/workflows/image.yml]
+  pull_request:
+    paths: [api/**, docs/api.openapi.yaml, .dockerignore, .github/workflows/image.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build, and push on main
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: api/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/boraio/pmg-assist-api:main
+            ghcr.io/boraio/pmg-assist-api:sha-${{ github.sha }}
