@@ -63,6 +63,11 @@ cluster is off, the app keeps working against the last published index. That
 property is the whole reason for the split and must not be eroded by
 convenience.
 
+**Revised by ADR 0002 (accepted 2026-11-02):** VYRA never serves user traffic
+unless ADR 0002 decision 5 chooses option B. Until there are users (Milestones
+0 to 2) everything runs on VYRA, lab-only, and the choice between hosted and
+VYRA serving is made at the end of Milestone 2, with measured numbers.
+
 ## Correctness and safety requirements
 
 This app makes factual claims about named public figures and their official
