@@ -126,6 +126,45 @@ responsible ministry, participant roles).
 **What does not**: Minsearch, Flask, the CLI as the interface, and the
 single-process deployment model.
 
+## Where things stand (2026-11-03)
+
+Milestone 0 is the current milestone. Done so far:
+
+- **Contract**: `docs/api.openapi.yaml` (OpenAPI 3.1) and ADR 0001. ADR 0002
+  accepted 2026-11-02.
+- **API skeleton**: FastAPI in `api/`, returning fixed fictional answers equal
+  to the spec examples, with 21 contract tests. There is no retrieval yet.
+- **CI**: `ci.yml` runs on the ARC runners (`arc-runner-set`): ruff, the bronze
+  checks, the API tests and spec validation. `image.yml` runs on
+  GitHub-hosted runners, because the ARC runners have no Docker daemon, and
+  pushes the private image `ghcr.io/boraio/pmg-assist-api` tagged `main` and
+  `sha-<commit>`.
+- **Lab deploy**: `infra/k8s/pmg-api.yaml` (namespace `pmg-assist`), a
+  LoadBalancer Service at `10.0.20.243:8077`, reached from outside the lab
+  through an SSH tunnel. The image pull secret `ghcr-pull` is created by hand
+  and never committed. No TLS yet.
+- **Bronze ingest 0.2** (Milestone 1 work, brought forward):
+  `ingest/pmg_ingest/bronze.py` fetches `committee-question` from PMG's
+  `/v2/minister-questions/`. PMG pages by `date desc` alone, which is unstable
+  across pages, so bronze never pages: a year with at most 500 records is one
+  request (`part=all.json`), otherwise one request per day
+  (`part=YYYY-MM-DD.json`). A year counts as complete only when records,
+  distinct ids and PMG's count agree. The backfill of 2026-10-29 holds 41,156
+  records over 18 years.
+- **Bronze layout**:
+  `data/bronze/committee-question/year=<y>/fetched=<ts>/part=*.json` with a
+  `_marker.json` per fetch, on nia's disk and not committed. This differs from
+  the RadosGW path sketched in ADR 0002, which waits on the `pmg-assist`
+  bucket (cluster operation).
+- **Measurements**: `docs/measurements/2026-10-29-committee-question.md`.
+
+Make targets: `make check` (lint, tests, spec), `make api` (local server on
+port 8077, because squid holds 8000 on nia), `make bronze-status`,
+`make bronze-plan`, `make bronze`, `make measure`.
+
+Still open for Milestone 0: TLS, the iOS and Android clients, and client
+builds in CI. The iOS client needs Xcode on a Mac.
+
 ## Milestones
 
 ### Milestone 0 — the contract and a thin slice
