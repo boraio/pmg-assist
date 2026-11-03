@@ -1,6 +1,6 @@
 # 0002 — Ingest from the PMG API, models on VYRA, serving location decided by measurement
 
-- Status: Proposed
+- Status: Accepted (2026-11-02)
 - Date: 2026-10-26
 - Milestone: 0 (revises the plan before step 2; does not change ADR 0001's contract)
 
