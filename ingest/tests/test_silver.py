@@ -38,6 +38,34 @@ def main():
                  "The information requested by the Honourable Member is not readily available."]:
         check(f"not a pointer: {text!r}", s.is_pointer(text), False)
 
+    # ADR 0003 decision 3: tables stay tables, spans expanded so each row stands alone
+    def rows(html_text):
+        return [b["rows"] for b in s.blocks(html_text) if b["type"] == "table"]
+
+    check("unclosed cells and rows are repaired",
+          rows("<table><tr><td>A<td>B<tr><td>C<td>D</table>"), [[["A", "B"], ["C", "D"]]])
+    check("rowspan repeats the value on each row it covers",
+          rows('<table><tr><td rowspan="2">Limpopo</td><td>Makhado</td><td>42 000,00</td></tr>'
+               '<tr><td>Musina</td><td>38 000,00</td></tr></table>'),
+          [[["Limpopo", "Makhado", "42 000,00"], ["Limpopo", "Musina", "38 000,00"]]])
+    check("colspan repeats the value across the columns it covers",
+          rows('<table><tr><td colspan="2">Total</td><td>9</td></tr><tr><td>a</td><td>b</td><td>c</td></tr></table>'),
+          [[["Total", "Total", "9"], ["a", "b", "c"]]])
+    check("a rowspan in the last column carries over",
+          rows('<table><tr><td>a</td><td rowspan="2">r</td></tr><tr><td>b</td></tr></table>'),
+          [[["a", "r"], ["b", "r"]]])
+    check("a nested table becomes text in its cell",
+          rows("<table><tr><td>outer<table><tr><td>i1</td><td>i2</td></tr><tr><td>i3</td></tr></table></td>"
+               "<td>z</td></tr></table>"),
+          [[["outer i1 i2 / i3", "z"]]])
+    check("unreadable spans count as 1; empty rows are dropped",
+          rows('<table><tr><td colspan="x">a</td><td rowspan="0">b</td></tr><tr><td></td><td></td></tr></table>'),
+          [[["a", "b"]]])
+    check("thead and tbody rows in order, th counted as cells",
+          rows("<table><thead><tr><th>Name</th><th>Amount</th></tr></thead>"
+               "<tbody><tr><td>X</td><td>1</td></tr></tbody></table>"),
+          [[["Name", "Amount"], ["X", "1"]]])
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 
