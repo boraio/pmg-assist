@@ -117,3 +117,54 @@ def table_rows(table):
         if any(row):
             rows.append(row)
     return rows
+
+
+# An XML declaration with an encoding makes lxml refuse a str; it carries no text.
+XML_DECL = re.compile(r"<\?xml[^>]*\?>", re.IGNORECASE)
+
+
+def blocks(html_text):
+    """Question or reply HTML as ordered blocks (ADR 0003, decision 3).
+
+    A block is {"type": "paragraph", "text": ..., "rows": None} or
+    {"type": "table", "text": None, "rows": [[cell, ...], ...]}. Both keys are
+    always present so every record has the same shape. Images are dropped.
+    """
+    if not html_text or not html_text.strip():
+        return []
+    try:
+        root = lhtml.document_fromstring(XML_DECL.sub("", html_text))
+    except etree.ParserError:  # nothing but comments
+        return []
+    out, buf = [], []
+
+    def flush():
+        text = ws(" ".join(buf))
+        buf.clear()
+        if text:
+            out.append({"type": "paragraph", "text": text, "rows": None})
+
+    def walk(el):
+        tag = tag_of(el)
+        if tag == "table":
+            flush()
+            rows = table_rows(el)
+            if rows:
+                out.append({"type": "table", "text": None, "rows": rows})
+            return
+        if tag is None or tag in SKIP_TAGS:
+            return
+        if tag in BREAK_TAGS:
+            flush()
+        if el.text:
+            buf.append(el.text)
+        for child in el:
+            walk(child)
+            if child.tail:
+                buf.append(child.tail)
+        if tag in BREAK_TAGS:
+            flush()
+
+    walk(root)
+    flush()
+    return out
