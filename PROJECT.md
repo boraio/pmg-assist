@@ -165,6 +165,10 @@ port 8077, because squid holds 8000 on nia), `make bronze-status`,
 Still open for Milestone 0: TLS, the iOS and Android clients, and client
 builds in CI. The iOS client needs Xcode on a Mac.
 
+**Order changed 2026-11-05 (owner's decision):** Milestone 1 starts now,
+before Milestone 0's remaining items. Those items are deferred, not dropped,
+and Milestone 0's exit still has to be met before Milestone 3.
+
 ## Milestones
 
 ### Milestone 0 — the contract and a thin slice
