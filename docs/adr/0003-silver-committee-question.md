@@ -1,6 +1,6 @@
 # 0003 — Silver for committee-question: text, tables and pointer replies
 
-- Status: Proposed
+- Status: Accepted (2026-11-05)
 - Date: 2026-11-05
 - Milestone: 1
 
