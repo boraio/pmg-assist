@@ -171,3 +171,46 @@ def blocks(html_text):
     walk(root)
     flush()
     return out
+
+
+# ---- one record (ADR 0003, decisions 1 and 4)
+
+
+def reply_kind(reply):
+    """empty, attachment_pointer or in_body. A reply with a table is never a pointer."""
+    if not reply:
+        return "empty"
+    if all(b["type"] == "paragraph" for b in reply) and is_pointer(" ".join(b["text"] for b in reply)):
+        return "attachment_pointer"
+    return "in_body"
+
+
+def to_silver(rec, fetched):
+    """One bronze committee-question record as one silver row.
+
+    Every row has the same keys. Attachments stay as JSON text so their
+    drifting shape never changes the Parquet schema.
+    """
+    reply = blocks(rec.get("answer"))
+    source_file = rec.get("source_file")
+    return {
+        "record_id": f"pmg-committee-question-{rec['id']}",
+        "pmg_id": rec["id"],
+        "url": rec.get("url"),
+        "date": rec.get("date"),
+        "year": rec.get("year"),
+        "code": rec.get("code"),
+        "answer_type": rec.get("answer_type"),
+        "house_id": rec.get("house_id"),
+        "minister_id": rec.get("minister_id"),
+        "question_to_name": rec.get("question_to_name"),
+        "asked_by_name": rec.get("asked_by_name"),
+        "asked_by_member_id": rec.get("asked_by_member_id"),
+        "question": blocks(rec.get("question")),
+        "reply": reply,
+        "reply_kind": reply_kind(reply),
+        "source_file": None if source_file is None else json.dumps(source_file),
+        "files": json.dumps(rec.get("files") or []),
+        "bronze_fetched": fetched,
+        "silver_version": VERSION,
+    }
