@@ -6,3 +6,6 @@ show-model-warnings: false
 gitignore: false
 detect-urls: false
 auto-lint: false
+attribute-co-authored-by: false
+attribute-author: false
+attribute-committer: false
