@@ -8,6 +8,9 @@ VENV   := .pmgvenv
 PY     := $(VENV)/bin/python
 BRONZE := data/bronze
 INGEST := PYTHONPATH=ingest $(PY) -m pmg_ingest.bronze --root $(BRONZE)
+SILVER := data/silver
+# silver's output folder carries silver.VERSION; read it from the code so the two never disagree
+SILVER_CQ = $(SILVER)/committee-question/version=$(shell PYTHONPATH=ingest $(PY) -c 'from pmg_ingest.silver import VERSION; print(VERSION)')
 
 .PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure silver
 
