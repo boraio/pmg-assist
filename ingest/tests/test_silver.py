@@ -88,6 +88,27 @@ def main():
     check("an XML declaration with an encoding is ignored",
           s.blocks('<?xml version="1.0" encoding="utf-8"?><p>x</p>'), [para("x")])
 
+    # ADR 0003 decisions 1 and 4: one silver row per record
+    rec = {"id": 17523, "code": "NW2467", "date": "2022-01-11", "year": 2022, "answer_type": "written",
+           "house_id": 3, "minister_id": 7, "question_to_name": "Minister of Agriculture",
+           "asked_by_name": "Example Member", "asked_by_member_id": 99,
+           "question": "<p>How many farmers?</p>", "answer": "<p>Find reply here</p>",
+           "source_file": {"file_path": "x.docx"}, "files": [],
+           "url": "http://pmg.org.za/committee-question/17523/"}
+    row = s.to_silver(rec, "20261029T090000Z")
+    check("record_id is stable and typed", row["record_id"], "pmg-committee-question-17523")
+    check("PMG url kept as given", row["url"], "http://pmg.org.za/committee-question/17523/")
+    check("question parsed into blocks", row["question"], [para("How many farmers?")])
+    check("a pointer reply is classified", row["reply_kind"], "attachment_pointer")
+    check("attachments kept as JSON text", (row["source_file"], row["files"]), ('{"file_path": "x.docx"}', "[]"))
+    check("bronze fetch and silver version recorded",
+          (row["bronze_fetched"], row["silver_version"]), ("20261029T090000Z", "0.1"))
+    check("a reply with a table is in_body, even if a cell says find reply here",
+          s.reply_kind(s.blocks("<table><tr><td>Find reply here</td></tr></table>")), "in_body")
+    check("a blank reply is empty", s.reply_kind(s.blocks("<p>&nbsp;</p>")), "empty")
+    check("a short real reply is in_body", s.reply_kind(s.blocks("<p>No.</p>")), "in_body")
+    check("a sparse record has the same keys", sorted(s.to_silver({"id": 1}, "x")), sorted(row))
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 
