@@ -3,10 +3,13 @@
 Run: python ingest/tests/test_silver.py   (prints PASS/FAIL lines, exits 1 on any FAIL)
 """
 
+import json
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pmg_ingest import bronze as b
 from pmg_ingest import silver as s
 
 RESULTS = {"PASS": 0, "FAIL": 0}
