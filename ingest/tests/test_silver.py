@@ -43,7 +43,7 @@ def main():
 
     # ADR 0003 decision 3: tables stay tables, spans expanded so each row stands alone
     def rows(html_text):
-        return [b["rows"] for b in s.blocks(html_text) if b["type"] == "table"]
+        return [blk["rows"] for blk in s.blocks(html_text) if blk["type"] == "table"]
 
     check("unclosed cells and rows are repaired",
           rows("<table><tr><td>A<td>B<tr><td>C<td>D</table>"), [[["A", "B"], ["C", "D"]]])
