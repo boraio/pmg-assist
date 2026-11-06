@@ -5,6 +5,7 @@ record: typed fields, the question and reply as ordered blocks (paragraphs, and
 tables kept as rows), and reply_kind.
 """
 
+import json
 import re
 
 from lxml import etree
