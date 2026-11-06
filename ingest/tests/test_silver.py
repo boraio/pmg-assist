@@ -66,6 +66,28 @@ def main():
                "<tbody><tr><td>X</td><td>1</td></tr></tbody></table>"),
           [[["Name", "Amount"], ["X", "1"]]])
 
+    # ADR 0003 decision 2: parsed, not stripped; images dropped; order kept
+    def para(text):
+        return {"type": "paragraph", "text": text, "rows": None}
+
+    check("paragraph, table, paragraph in document order",
+          s.blocks("<p>Intro<table><tr><td>A<td>B</table><p>After</p>"),
+          [para("Intro"), {"type": "table", "text": None, "rows": [["A", "B"]]}, para("After")])
+    check("entities decoded, whitespace collapsed, data: images dropped",
+          s.blocks("<p>Q &amp; A&nbsp;&nbsp; here<img src='data:image/png;base64,AAAA'></p>"),
+          [para("Q & A here")])
+    check("<br> and list items split paragraphs; comments dropped",
+          s.blocks("one<br>two <!-- note --> more<ul><li>three</li></ul>"),
+          [para("one"), para("two more"), para("three")])
+    check("head, style and script carry no text",
+          s.blocks("<html><head><title>T</title><style>p{}</style></head>"
+                   "<body><script>x()</script><p>B</p></body></html>"),
+          [para("B")])
+    check("empty, blank, None and comment-only input give no blocks",
+          [s.blocks(h) for h in ("", "   ", None, "<!-- x -->", "<p></p>")], [[], [], [], [], []])
+    check("an XML declaration with an encoding is ignored",
+          s.blocks('<?xml version="1.0" encoding="utf-8"?><p>x</p>'), [para("x")])
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 
