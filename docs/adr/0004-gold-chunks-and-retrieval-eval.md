@@ -1,6 +1,6 @@
 # 0004 — Gold: chunks, embeddings and retrieval evaluation in DuckDB
 
-- Status: Proposed
+- Status: Accepted (2026-11-06)
 - Date: 2026-11-06
 - Milestone: 1
 
