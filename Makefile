@@ -49,6 +49,12 @@ bronze-plan:     ## what a backfill would fetch; writes nothing
 bronze:          ## fetch committee-question into data/bronze (~15 min)
 	$(INGEST)
 
+# ---- S: scrub
+silver:          ## bronze committee-question -> silver JSONL + Parquet (ADR 0003)
+	PYTHONPATH=ingest $(PY) -m pmg_ingest.silver --bronze-root $(BRONZE) --out $(SILVER)
+	duckdb -c "COPY (SELECT * FROM read_json('$(SILVER_CQ)/records.jsonl', format = 'newline_delimited', sample_size = -1, maximum_object_size = 268435456)) TO '$(SILVER_CQ)/records.parquet' (FORMAT parquet, COMPRESSION zstd)"
+	duckdb -c "SELECT count(*) AS rows, count(DISTINCT record_id) AS ids, count(*) FILTER (WHERE reply_kind = 'attachment_pointer') AS pointers FROM '$(SILVER_CQ)/records.parquet'"
+
 # ---- E: explore
 measure:         ## measurement queries over bronze
 	duckdb < ingest/sql/measure_committee_question.sql
