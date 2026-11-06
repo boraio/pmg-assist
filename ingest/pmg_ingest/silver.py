@@ -7,6 +7,9 @@ tables kept as rows), and reply_kind.
 
 import re
 
+from lxml import etree
+from lxml import html as lhtml
+
 VERSION = "0.1"
 
 # ADR 0003, decision 4. Matched against the reply with everything but letters
