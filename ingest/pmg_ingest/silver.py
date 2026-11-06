@@ -215,3 +215,71 @@ def to_silver(rec, fetched):
         "bronze_fetched": fetched,
         "silver_version": VERSION,
     }
+
+
+# ---- the whole set (ADR 0003, decisions 1 and 6)
+
+CTYPE = "committee-question"
+
+
+def bronze_years(bronze_root, ctype=CTYPE):
+    """Years that have a bronze partition directory, ascending."""
+    base = Path(bronze_root) / ctype
+    return sorted(int(p.name.split("=", 1)[1]) for p in base.glob("year=*") if p.is_dir())
+
+
+def records_in(fdir):
+    """Every record in one bronze fetch, from its part=*.json files."""
+    for part in sorted(Path(fdir).glob("part=*.json")):
+        yield from json.loads(part.read_text(encoding="utf-8"))["results"]
+
+
+def build(bronze_root, out_root, ctype=CTYPE):
+    """Write records.jsonl and _marker.json for this silver version; return the marker.
+
+    Reads the newest complete fetch of each year, as bronze defines it. The
+    output depends only on the bronze fetches used, so a rerun gives the same rows.
+    """
+    out = Path(out_root) / ctype / f"version={VERSION}"
+    out.mkdir(parents=True, exist_ok=True)
+    tmp = out / "records.jsonl.tmp"
+    seen, kinds, used, missing = set(), {}, {}, []
+    with tmp.open("w", encoding="utf-8") as f:
+        for year in bronze_years(bronze_root, ctype):
+            fdir = bronze.latest_complete_dir(bronze_root, ctype, year)
+            if fdir is None:
+                missing.append(year)
+                continue
+            fetched = fdir.name.split("=", 1)[1]
+            used[str(year)] = fetched
+            for rec in records_in(fdir):
+                if rec["id"] in seen:
+                    raise ValueError(f"record {rec['id']} appears twice (year {year})")
+                seen.add(rec["id"])
+                try:
+                    row = to_silver(rec, fetched)
+                except Exception as e:
+                    raise RuntimeError(f"record {rec['id']} (year {year}) failed") from e
+                kinds[row["reply_kind"]] = kinds.get(row["reply_kind"], 0) + 1
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    tmp.replace(out / "records.jsonl")
+    marker = {"silver_version": VERSION, "ctype": ctype, "rows": len(seen),
+              "reply_kinds": dict(sorted(kinds.items())), "bronze_fetches": used,
+              "years_without_complete_fetch": missing}
+    bronze.write_atomic(out / "_marker.json", json.dumps(marker, indent=2).encode())
+    return marker
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="Build silver committee-question from bronze (ADR 0003).")
+    ap.add_argument("--bronze-root", default="data/bronze", type=Path)
+    ap.add_argument("--out", default="data/silver", type=Path)
+    args = ap.parse_args(argv)
+    m = build(args.bronze_root, args.out)
+    print(f"silver {VERSION}: {m['rows']} rows, {m['reply_kinds']}, "
+          f"years without a complete fetch: {m['years_without_complete_fetch'] or 'none'}")
+    return 1 if m["years_without_complete_fetch"] else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
