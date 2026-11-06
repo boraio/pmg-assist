@@ -102,3 +102,29 @@ cluster concern.
 
 ### 6. Layout
 
+```
+data/gold/committee-question/index=<v>/chunks.parquet          chunks + searched text
+data/gold/committee-question/index=<v>/emb=<model>.parquet     one embedding per chunk
+data/gold/committee-question/index=<v>/search.duckdb            fts and vss indexes
+docs/eval/committee-question.yaml                               the evaluation set
+docs/eval/results/<date>-index-<v>.md                           committed metrics
+```
+
+`index=<v>` is the `index_version` that later feeds `corpus.index_published_at`
+in the API contract (ADR 0002).
+
+## Consequences
+
+- Embedding dependencies (a model runtime such as sentence-transformers and
+  PyTorch for CPU) go in a separate requirements file. CI does not install
+  them; chunking and fusion checks run in CI with a fake embedder.
+- Private individuals' names in tables are indexed as in silver, lab only
+  (ADR 0003, decision 5).
+- Chunk limits and the context line are first choices. Changing them is
+  measured against the evaluation set, not argued.
+
+## Open
+
+- How long each candidate model takes to embed the corpus on nia's CPU.
+- The sentence splitter for the 147 long paragraphs, chosen when the chunker
+  is built and covered by checks.
