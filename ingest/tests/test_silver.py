@@ -112,6 +112,48 @@ def main():
     check("a short real reply is in_body", s.reply_kind(s.blocks("<p>No.</p>")), "in_body")
     check("a sparse record has the same keys", sorted(s.to_silver({"id": 1}, "x")), sorted(row))
 
+    # ADR 0003 decisions 1 and 6: build reads the newest complete fetch of each year
+    with tempfile.TemporaryDirectory() as tmp:
+        broot, sroot = Path(tmp) / "bronze", Path(tmp) / "silver"
+        out = sroot / s.CTYPE / "version=0.1"
+
+        def fetch(year, stamp, recs, marker):
+            fdir = b.partition_dir(broot, s.CTYPE, year) / f"fetched={stamp}"
+            b.write_atomic(fdir / "part=all.json",
+                           json.dumps({"count": len(recs), "next": None, "results": recs}).encode())
+            b.write_atomic(fdir / "_marker.json", json.dumps(marker).encode())
+
+        ok = {"complete": True, "ingest_version": "0.2"}
+        fetch(2020, "20261001T000000Z", [{"id": 1, "answer": "<p>old</p>"}], ok)
+        fetch(2020, "20261029T090000Z", [{"id": 1, "answer": "<p>new</p>"}, {"id": 2, "answer": "Find reply here"}], ok)
+        fetch(2020, "20261030T000000Z", [{"id": 3}], {"complete": False, "ingest_version": "0.2"})
+        fetch(2021, "20261029T090000Z", [{"id": 4, "answer": "<p>No.</p>"}], ok)
+        marker = s.build(broot, sroot)
+        rows = [json.loads(line) for line in (out / "records.jsonl").read_text().splitlines()]
+        check("newest complete fetch wins; an incomplete newer one is ignored",
+              [(r["pmg_id"], r["reply"][0]["text"]) for r in rows], [(1, "new"), (2, "Find reply here"), (4, "No.")])
+        check("marker counts rows and reply kinds",
+              (marker["rows"], marker["reply_kinds"]), (3, {"attachment_pointer": 1, "in_body": 2}))
+        check("marker names the bronze fetches used",
+              marker["bronze_fetches"], {"2020": "20261029T090000Z", "2021": "20261029T090000Z"})
+        check("marker on disk matches", json.loads((out / "_marker.json").read_text()), marker)
+        check("no temporary file left behind", sorted(p.name for p in out.iterdir()), ["_marker.json", "records.jsonl"])
+        check("a rerun gives the same bytes",
+              ((out / "records.jsonl").read_bytes(), s.build(broot, sroot))[0], (out / "records.jsonl").read_bytes())
+
+        fetch(2022, "20261029T090000Z", [{"id": 5}], {"complete": False, "ingest_version": "0.2"})
+        check("a year without a complete fetch makes main fail",
+              s.main(["--bronze-root", str(broot), "--out", str(sroot)]), 1)
+        check("and is named in the marker", s.build(broot, sroot)["years_without_complete_fetch"], [2022])
+
+        fetch(2023, "20261029T090000Z", [{"id": 1}], ok)
+        try:
+            s.build(broot, sroot)
+            dup = "no error"
+        except ValueError as e:
+            dup = str(e)
+        check("a record id in two years stops the build", dup, "record 1 appears twice (year 2023)")
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 
