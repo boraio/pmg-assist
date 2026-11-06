@@ -132,15 +132,21 @@ def partition_dir(root: Path, ctype: str, year: int) -> Path:
 
 
 
-def latest_complete(root: Path, ctype: str, year: int) -> dict | None:
+def latest_complete_dir(root: Path, ctype: str, year: int) -> Path | None:
+    """The newest fetch directory of a year whose marker is complete and in a trusted layout."""
     pdir = partition_dir(root, ctype, year)
     if not pdir.is_dir():
         return None
     for fdir in sorted(pdir.glob("fetched=*"), reverse=True):
         m = read_marker(fdir)
         if m and m.get("complete") and m.get("ingest_version") in LAYOUT_VERSIONS:
-            return m
+            return fdir
     return None
+
+
+def latest_complete(root: Path, ctype: str, year: int) -> dict | None:
+    fdir = latest_complete_dir(root, ctype, year)
+    return read_marker(fdir) if fdir else None
 
 
 def plan(years: list[int], current_year: int, complete: dict[int, bool], force: bool) -> list[int]:
