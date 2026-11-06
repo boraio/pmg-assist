@@ -35,6 +35,9 @@ jobs:
       - name: Offline checks
         run: python ingest/tests/test_bronze.py
 
+      - name: Silver checks
+        run: python ingest/tests/test_silver.py
+
       - name: API contract tests
         run: python -m pytest api/tests -q
 

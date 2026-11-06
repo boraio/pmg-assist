@@ -8,8 +8,11 @@ VENV   := .pmgvenv
 PY     := $(VENV)/bin/python
 BRONZE := data/bronze
 INGEST := PYTHONPATH=ingest $(PY) -m pmg_ingest.bronze --root $(BRONZE)
+SILVER := data/silver
+# silver's output folder carries silver.VERSION; read it from the code so the two never disagree
+SILVER_CQ = $(SILVER)/committee-question/version=$(shell PYTHONPATH=ingest $(PY) -c 'from pmg_ingest.silver import VERSION; print(VERSION)')
 
-.PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure
+.PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure silver
 
 help:   ## list targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -24,6 +27,7 @@ lint:   ## ruff over the Python code
 
 test:   ## offline checks
 	$(PY) ingest/tests/test_bronze.py
+	$(PY) ingest/tests/test_silver.py
 	$(PY) -m pytest api/tests -q
 
 spec:   ## validate the API contract
@@ -44,6 +48,12 @@ bronze-plan:     ## what a backfill would fetch; writes nothing
 
 bronze:          ## fetch committee-question into data/bronze (~15 min)
 	$(INGEST)
+
+# ---- S: scrub
+silver:          ## bronze committee-question -> silver JSONL + Parquet (ADR 0003)
+	PYTHONPATH=ingest $(PY) -m pmg_ingest.silver --bronze-root $(BRONZE) --out $(SILVER)
+	duckdb -c "COPY (SELECT * REPLACE (question::STRUCT(\"type\" VARCHAR, \"text\" VARCHAR, \"rows\" VARCHAR[][])[] AS question) FROM read_json('$(SILVER_CQ)/records.jsonl', format = 'newline_delimited', sample_size = -1, maximum_object_size = 268435456)) TO '$(SILVER_CQ)/records.parquet' (FORMAT parquet, COMPRESSION zstd)"
+	duckdb -c "SELECT count(*) AS rows, count(DISTINCT record_id) AS ids, count(*) FILTER (WHERE reply_kind = 'attachment_pointer') AS pointers FROM '$(SILVER_CQ)/records.parquet'"
 
 # ---- E: explore
 measure:         ## measurement queries over bronze

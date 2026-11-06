@@ -1,4 +1,5 @@
 -r api/requirements.txt
+-r ingest/requirements.txt
 ruff==0.17.1
 pytest
 httpx
