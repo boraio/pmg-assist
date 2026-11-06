@@ -5,11 +5,16 @@ record: typed fields, the question and reply as ordered blocks (paragraphs, and
 tables kept as rows), and reply_kind.
 """
 
+import argparse
 import json
 import re
+import sys
+from pathlib import Path
 
 from lxml import etree
 from lxml import html as lhtml
+
+from . import bronze
 
 VERSION = "0.1"
 
