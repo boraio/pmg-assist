@@ -34,7 +34,9 @@ when the API serves retrieval.
 
 ### 1. Chunks never cross a record, and tables split only between rows
 
-- Each record gives one **question chunk** and zero or more **reply chunks**.
+- Each record gives question chunks and zero or more reply chunks. A question
+  is one chunk unless it is longer than the limit (just over 1% are); then it
+  is split like a paragraph.
 - Reply paragraphs are packed in order into chunks of at most 1,500 characters.
   A paragraph longer than that is split at sentence ends.
 - A table is packed row by row into chunks of at most 1,500 characters. Every
