@@ -134,8 +134,10 @@ Milestone 0 is the current milestone. Done so far:
   accepted 2026-11-02.
 - **API skeleton**: FastAPI in `api/`, returning fixed fictional answers equal
   to the spec examples, with 21 contract tests. There is no retrieval yet.
-- **CI**: `ci.yml` runs on the ARC runners (`arc-runner-set`): ruff, the bronze
-  checks, the API tests and spec validation. `image.yml` runs on
+- **CI**: `ci.yml` runs on GitHub-hosted runners since 2026-11-12, when the
+  repository became public and the cluster's ARC runners stopped taking jobs:
+  ruff, the bronze and silver checks, the API tests and spec validation.
+  `image.yml` also runs on
   GitHub-hosted runners, because the ARC runners have no Docker daemon, and
   pushes the private image `ghcr.io/boraio/pmg-assist-api` tagged `main` and
   `sha-<commit>`.
