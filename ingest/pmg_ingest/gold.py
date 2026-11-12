@@ -8,6 +8,12 @@ is searched (a context line plus the chunk text).
 import re
 import sys
 
+VERSION = "0.1"  # the index version, <v> in data/gold/committee-question/index=<v>
+MAX_CHARS = 1500  # ADR 0004, decision 1
+HEAD_MAX = 500  # a table's first row is repeated in later chunks only if this short
+FIRST_ROW = "First row of the table:"
+
+
 # A sentence ends at ".", "!" or "?" followed by one space and an upper-case
 # letter, digit, bracket or quote. Silver text has single spaces only, so the
 # pieces below join back with one space into exactly the original text.
@@ -45,11 +51,6 @@ def split_long(text, limit=MAX_CHARS):
     for sent in SENTENCE_END.split(text):
         units.extend([sent] if len(sent) <= limit else sent.split(" "))
     return pack(units, limit, " ")
-
-VERSION = "0.1"  # the index version, <v> in data/gold/committee-question/index=<v>
-MAX_CHARS = 1500  # ADR 0004, decision 1
-HEAD_MAX = 500  # a table's first row is repeated in later chunks only if this short
-FIRST_ROW = "First row of the table:"
 
 
 def main(argv=None):
