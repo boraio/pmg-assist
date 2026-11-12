@@ -21,7 +21,7 @@ plus queries run on 2026-11-05 over the same data, show:
   771 use `rowspan` and 1,393 `colspan` greater than 1; 155 contain a nested
   table.
 - **Flattening breaks rows.** A tag strip turns a table into one run of text
-  (`Limpopo Makhado John Vhembe Musina 42 000,00 …`). A chunk cut from that
+  (`Province Surname Firstname District Town 42 000,00 …`). A chunk cut from that
   can pair a name with the wrong amount, which would be a misattribution
   carrying a citation.
 - **About 2,940 replies only point to an attachment** ("Find reply here" and
