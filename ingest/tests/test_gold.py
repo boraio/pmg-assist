@@ -62,6 +62,36 @@ def main():
     check("a long first row is not repeated",
           g.table_chunks([["x" * 600], ["y"], ["z" * 1000]], 1500), ["x" * 600 + "\ny", "z" * 1000])
 
+    # paragraphs, blocks and whole records (ADR 0004 decisions 1 and 2)
+    check("paragraphs pack one per line", g.paragraph_chunks(["One.", "Two."]), ["One.\nTwo."])
+    long_para = g.paragraph_chunks(["A b. " * 10 + "End.", "Next."], 20)
+    check("a paragraph over the limit is cut at sentence ends, none over the limit",
+          max(len(c) for c in long_para) <= 20, True)
+    check("the tail of a cut paragraph packs with the next one", long_para[-1], "A b. A b. End.\nNext.")
+    para = {"type": "paragraph", "text": "Before.", "rows": None}
+    table = {"type": "table", "text": None, "rows": [["A", "B"], ["1", "2"]]}
+    after = {"type": "paragraph", "text": "After.", "rows": None}
+    check("a table keeps its own chunk between paragraph runs",
+          g.blocks_chunks([para, table, after]), ["Before.", "A | B\n1 | 2", "After."])
+    check("no blocks, no chunks", g.blocks_chunks([]), [])
+
+    rec = {"record_id": "pmg-committee-question-1", "code": "NW1", "date": "2022-01-11",
+           "question_to_name": "Minister of Example", "reply_kind": "in_body",
+           "question": [{"type": "paragraph", "text": "How many?", "rows": None}], "reply": [para, table]}
+    chunks = g.chunks_for(rec)
+    check("question first, then the reply, numbered in order",
+          [(c["chunk_id"], c["kind"]) for c in chunks],
+          [("pmg-committee-question-1#0", "question"), ("pmg-committee-question-1#1", "reply"),
+           ("pmg-committee-question-1#2", "reply")])
+    check("searched text is the context line plus the chunk text",
+          chunks[0]["searched"], "NW1, 2022-01-11. Question to: Minister of Example.\nHow many?")
+    check("the chunk text itself carries no context line", chunks[0]["text"], "How many?")
+    check("every chunk carries the index version", {c["index_version"] for c in chunks}, {"0.1"})
+    pointer = dict(rec, reply_kind="attachment_pointer")
+    check("a pointer reply gives only its question chunk", [c["kind"] for c in g.chunks_for(pointer)], ["question"])
+    check("an empty reply gives only its question chunk",
+          [c["kind"] for c in g.chunks_for(dict(rec, reply_kind="empty", reply=[]))], ["question"])
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 
