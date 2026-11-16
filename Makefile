@@ -12,7 +12,11 @@ SILVER := data/silver
 # silver's output folder carries silver.VERSION; read it from the code so the two never disagree
 SILVER_CQ = $(SILVER)/committee-question/version=$(shell PYTHONPATH=ingest $(PY) -c 'from pmg_ingest.silver import VERSION; print(VERSION)')
 
-.PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure silver
+GOLD := data/gold
+# gold's output folder carries gold.VERSION, the index version; read it from the code
+GOLD_CQ = $(GOLD)/committee-question/index=$(shell PYTHONPATH=ingest $(PY) -c 'from pmg_ingest.gold import VERSION; print(VERSION)')
+
+.PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure silver gold
 
 help:   ## list targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -28,6 +32,7 @@ lint:   ## ruff over the Python code
 test:   ## offline checks
 	$(PY) ingest/tests/test_bronze.py
 	$(PY) ingest/tests/test_silver.py
+	$(PY) ingest/tests/test_gold.py
 	$(PY) -m pytest api/tests -q
 
 spec:   ## validate the API contract
@@ -54,6 +59,11 @@ silver:          ## bronze committee-question -> silver JSONL + Parquet (ADR 000
 	PYTHONPATH=ingest $(PY) -m pmg_ingest.silver --bronze-root $(BRONZE) --out $(SILVER)
 	duckdb -c "COPY (SELECT * REPLACE (question::STRUCT(\"type\" VARCHAR, \"text\" VARCHAR, \"rows\" VARCHAR[][])[] AS question) FROM read_json('$(SILVER_CQ)/records.jsonl', format = 'newline_delimited', sample_size = -1, maximum_object_size = 268435456)) TO '$(SILVER_CQ)/records.parquet' (FORMAT parquet, COMPRESSION zstd)"
 	duckdb -c "SELECT count(*) AS rows, count(DISTINCT record_id) AS ids, count(*) FILTER (WHERE reply_kind = 'attachment_pointer') AS pointers FROM '$(SILVER_CQ)/records.parquet'"
+
+gold:            ## silver -> gold chunks JSONL + Parquet (ADR 0004)
+	PYTHONPATH=ingest $(PY) -m pmg_ingest.gold --silver-root $(SILVER) --out $(GOLD)
+	duckdb -c "COPY (SELECT * FROM read_json('$(GOLD_CQ)/chunks.jsonl', format = 'newline_delimited', sample_size = -1, maximum_object_size = 268435456)) TO '$(GOLD_CQ)/chunks.parquet' (FORMAT parquet, COMPRESSION zstd)"
+	duckdb -c "SELECT count(*) AS chunks, count(DISTINCT record_id) AS records, max(length(text)) AS longest, count(*) FILTER (WHERE length(text) > 1500) AS over_limit FROM '$(GOLD_CQ)/chunks.parquet'"
 
 # ---- E: explore
 measure:         ## measurement queries over bronze
