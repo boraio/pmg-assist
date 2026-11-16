@@ -12,6 +12,10 @@ SILVER := data/silver
 # silver's output folder carries silver.VERSION; read it from the code so the two never disagree
 SILVER_CQ = $(SILVER)/committee-question/version=$(shell PYTHONPATH=ingest $(PY) -c 'from pmg_ingest.silver import VERSION; print(VERSION)')
 
+GOLD := data/gold
+# gold's output folder carries gold.VERSION, the index version; read it from the code
+GOLD_CQ = $(GOLD)/committee-question/index=$(shell PYTHONPATH=ingest $(PY) -c 'from pmg_ingest.gold import VERSION; print(VERSION)')
+
 .PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure silver gold
 
 help:   ## list targets
