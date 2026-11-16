@@ -90,6 +90,41 @@ def table_chunks(rows, limit=MAX_CHARS):
     return out
 
 
+def paragraph_chunks(texts, limit=MAX_CHARS):
+    """Consecutive paragraphs packed into chunks, one per line; a paragraph is cut only if over limit."""
+    return pack([p for t in texts for p in split_long(t, limit)], limit, "\n")
+
+
+def blocks_chunks(blocks, limit=MAX_CHARS):
+    """Silver blocks as chunk texts, in order: runs of paragraphs packed, each table on its own."""
+    out, run = [], []
+    for b in blocks:
+        if b["type"] == "table":
+            out.extend(paragraph_chunks(run, limit))
+            run = []
+            out.extend(table_chunks(b["rows"], limit))
+        else:
+            run.append(b["text"])
+    out.extend(paragraph_chunks(run, limit))
+    return out
+
+
+def context_line(rec):
+    """Searched before each chunk's text (ADR 0004, decision 2); never shown as a quote."""
+    return f"{rec.get('code') or ''}, {rec.get('date') or ''}. Question to: {rec.get('question_to_name') or ''}."
+
+
+def chunks_for(rec, limit=MAX_CHARS):
+    """All chunks of one silver record, in order: the question, then the reply if it is in the body."""
+    parts = [("question", t) for t in blocks_chunks(rec.get("question") or [], limit)]
+    if rec.get("reply_kind") == "in_body":
+        parts += [("reply", t) for t in blocks_chunks(rec.get("reply") or [], limit)]
+    ctx = context_line(rec)
+    return [{"chunk_id": f"{rec['record_id']}#{i}", "record_id": rec["record_id"], "kind": kind,
+             "position": i, "text": text, "searched": f"{ctx}\n{text}", "index_version": VERSION}
+            for i, (kind, text) in enumerate(parts)]
+
+
 def main(argv=None):
     raise SystemExit("gold build is not written yet")
 
