@@ -53,6 +53,43 @@ def split_long(text, limit=MAX_CHARS):
     return pack(units, limit, " ")
 
 
+def row_text(row):
+    """A table row as one line, cells joined with " | "."""
+    return " | ".join(row)
+
+
+def table_chunks(rows, limit=MAX_CHARS):
+    """A table's rows packed into chunks, split only between rows (ADR 0004).
+
+    Every chunk after the first starts with the table's first row, labelled as
+    the first row (never as column names), when that line is at most HEAD_MAX
+    chars. A row longer than limit is split at cell boundaries into chunks of
+    its own.
+    """
+    if not rows:
+        return []
+    texts = [row_text(r) for r in rows]
+    head = f"{FIRST_ROW} {texts[0]}"
+    repeat = len(head) <= HEAD_MAX
+    out, cur = [], []
+    for i, (row, text) in enumerate(zip(rows, texts)):
+        if len(text) > limit:
+            if cur:
+                out.append("\n".join(cur))
+                cur = []
+            out.extend(pack([p for cell in row for p in split_long(cell, limit)], limit, " | "))
+            continue
+        if cur and len("\n".join(cur)) + 1 + len(text) <= limit:
+            cur.append(text)
+            continue
+        if cur:
+            out.append("\n".join(cur))
+        cur = [head, text] if i > 0 and repeat and len(head) + 1 + len(text) <= limit else [text]
+    if cur:
+        out.append("\n".join(cur))
+    return out
+
+
 def main(argv=None):
     raise SystemExit("gold build is not written yet")
 
