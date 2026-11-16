@@ -92,6 +92,31 @@ def main():
     check("an empty reply gives only its question chunk",
           [c["kind"] for c in g.chunks_for(dict(rec, reply_kind="empty", reply=[]))], ["question"])
 
+    # build: silver records.jsonl in, chunks.jsonl and a marker out (ADR 0004 decision 6)
+    with tempfile.TemporaryDirectory() as tmp:
+        sroot, groot = Path(tmp) / "silver", Path(tmp) / "gold"
+        sdir = sroot / "committee-question" / "version=0.1"
+        sdir.mkdir(parents=True)
+        recs = [rec, pointer]
+        (sdir / "records.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+        (sdir / "_marker.json").write_text(json.dumps({"rows": 2}))
+        m = g.build(sroot, groot)
+        out = groot / "committee-question" / "index=0.1"
+        lines = [json.loads(x) for x in (out / "chunks.jsonl").read_text().splitlines()]
+        check("chunks for every record, in order", [c["kind"] for c in lines], ["question", "reply", "reply", "question"])
+        check("marker counts records, chunks and kinds",
+              (m["records"], m["silver_rows"], m["chunks"], m["kinds"], m["over_limit"]),
+              (2, 2, 4, {"question": 2, "reply": 2}, 0))
+        check("marker on disk matches", json.loads((out / "_marker.json").read_text()), m)
+        check("no temporary file left behind", sorted(p.name for p in out.iterdir()), ["_marker.json", "chunks.jsonl"])
+        check("a rerun gives the same bytes",
+              ((out / "chunks.jsonl").read_bytes(), g.build(sroot, groot))[0], (out / "chunks.jsonl").read_bytes())
+        check("main succeeds when every silver record was read",
+              g.main(["--silver-root", str(sroot), "--out", str(groot)]), 0)
+        (sdir / "_marker.json").write_text(json.dumps({"rows": 3}))
+        check("main fails when silver's marker counts other rows",
+              g.main(["--silver-root", str(sroot), "--out", str(groot)]), 1)
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 
