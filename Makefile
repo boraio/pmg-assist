@@ -32,6 +32,7 @@ lint:   ## ruff over the Python code
 test:   ## offline checks
 	$(PY) ingest/tests/test_bronze.py
 	$(PY) ingest/tests/test_silver.py
+	$(PY) ingest/tests/test_gold.py
 	$(PY) -m pytest api/tests -q
 
 spec:   ## validate the API contract
