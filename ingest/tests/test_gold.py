@@ -44,6 +44,24 @@ def main():
     check("a full stop before lower case is not a sentence end",
           g.SENTENCE_END.split("See p. ten. Then (2) more."), ["See p. ten.", "Then (2) more."])
 
+    # table_chunks: split only between rows, first row repeated and labelled (ADR 0004 decision 1)
+    rows = [["Province", "Name", "Amount"]] + [["Limpopo", f"Person {i}", "1 000,00"] for i in range(200)]
+    tch = g.table_chunks(rows, 200)
+    check("a long table becomes several chunks, none over the limit",
+          (len(tch) > 1, max(len(c) for c in tch) <= 200), (True, True))
+    check("the first chunk starts with the first row, unlabelled", tch[0].split("\n")[0], "Province | Name | Amount")
+    check("later chunks start with the first row, labelled as such",
+          {c.split("\n")[0] for c in tch[1:]}, {"First row of the table: Province | Name | Amount"})
+    check("every row appears once, whole and in order",
+          [line for c in tch for line in c.split("\n") if not line.startswith(g.FIRST_ROW)],
+          [g.row_text(r) for r in rows])
+    check("a small table is one chunk", g.table_chunks([["A", "B"], ["1", "2"]]), ["A | B\n1 | 2"])
+    check("no rows, no chunks", g.table_chunks([]), [])
+    check("a row over the limit is split at cells, in a chunk of its own",
+          g.table_chunks([["h"], ["a" * 30, "b" * 30], ["c"]], 40), ["h", "a" * 30, "b" * 30, "First row of the table: h\nc"])
+    check("a long first row is not repeated",
+          g.table_chunks([["x" * 600], ["y"], ["z" * 1000]], 1500), ["x" * 600 + "\ny", "z" * 1000])
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 
