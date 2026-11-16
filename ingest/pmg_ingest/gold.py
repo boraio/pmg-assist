@@ -5,8 +5,13 @@ belongs to, its kind and position, the exact text it holds, and the text that
 is searched (a context line plus the chunk text).
 """
 
+import argparse
+import json
 import re
 import sys
+from pathlib import Path
+
+from . import bronze, silver
 
 VERSION = "0.1"  # the index version, <v> in data/gold/committee-question/index=<v>
 MAX_CHARS = 1500  # ADR 0004, decision 1
