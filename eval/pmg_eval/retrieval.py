@@ -5,7 +5,12 @@ docs/eval/committee-question.yaml, ranks records by their best chunk, and
 reports Recall@5 and MRR.
 """
 
+import argparse
+import datetime as dt
 import sys
+from pathlib import Path
+
+import yaml
 
 TOP_K = 5  # Recall@5
 CUTOFF = 20  # MRR counts a first expected record only within the top 20
