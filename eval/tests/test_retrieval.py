@@ -38,6 +38,28 @@ def main():
     check("ties are broken by record id", r.rrf(["b"], ["a"]), ["a", "b"])
     check("one list fused alone keeps its order", r.rrf(["c", "a", "b"]), ["c", "a", "b"])
 
+    # loading, evaluating and reporting, with a fake search instead of an index
+    with tempfile.TemporaryDirectory() as tmp:
+        qfile = Path(tmp) / "q.yaml"
+        qfile.write_text("questions:\n"
+                         "  - id: q1\n    question: A?\n    answers: [r1]\n"
+                         "  - id: q2\n    question: B | C?\n    answers: [r9]\n"
+                         "  - id: q3\n    question: Unanswerable?\n    answers: []\n")
+        qs = r.load_questions(qfile)
+    check("questions load from YAML", [q["id"] for q in qs], ["q1", "q2", "q3"])
+    fake = {"A?": ["r2", "r1"], "B | C?": ["r3"]}
+    rows = r.evaluate(qs, lambda text: fake[text])
+    check("unanswerable questions are not scored", [qid for qid, _, _ in rows], ["q1", "q2"])
+    check("each question gets the rank of its first expected record", [rank for _, _, rank in rows], [2, None])
+    meta = {"date": "2026-11-17", "index": "index=0.1", "chunks": 149067, "questions": "q.yaml"}
+    text = r.report("BM25", rows, meta)
+    check("the report states both scores",
+          ("- Recall@5: 0.50" in text, "- MRR (cutoff 20): 0.25" in text), (True, True))
+    check("the report lists every scored question", text.count("\n| q"), 2)
+    check("a pipe in a question cannot break the table", "| q2 B / C? | not in the top 20 |" in text, True)
+    check("the chunk count is shown with separators", "149,067 chunks" in text, True)
+    check("BM25 search keeps at most CUTOFF records", "LIMIT 20" in r.BM25_SQL, True)
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 
