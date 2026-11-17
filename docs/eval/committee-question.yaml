@@ -1,0 +1,43 @@
+# Hand-written evaluation set for committee-question retrieval (ADR 0004, decision 5).
+# Each question is phrased as a citizen would ask it. "answers" lists every PMG
+# record id known to answer it; [] means no record does (kept for Milestone 2).
+questions:
+  - id: q001
+    question: How many smallholder farmers received Covid-19 relief vouchers for the 2020 winter season?
+    answers: [pmg-committee-question-17523]
+  - id: q002
+    question: What qualification do you need to work as an early childhood development practitioner, and is there a minimum salary?
+    answers: [pmg-committee-question-9294]
+  - id: q003
+    question: What is government doing about the refugees living in the Public Works building in Cape Town?
+    answers: [pmg-committee-question-16795]
+  - id: q004
+    question: How many baby abandonment cases has the NPA taken to trial since 2019?
+    answers: [pmg-committee-question-26218]
+  - id: q005
+    question: Why is SAFCOL overspending on maintenance and contractors, and what is being done about it?
+    answers: [pmg-committee-question-40114]
+  - id: q006
+    question: How is the Department of Agriculture helping small-scale farmers as food prices rise?
+    answers: [pmg-committee-question-37871]
+  - id: q007
+    question: What is being done about the run-down township industrial parks in Gauteng?
+    answers: [pmg-committee-question-221]
+  - id: q008
+    question: Will school governing bodies lose their say in appointing senior teachers after the report on selling teaching posts?
+    answers: [pmg-committee-question-3962]
+  - id: q009
+    question: What is the education department doing about overcrowded public schools?
+    answers: [pmg-committee-question-32760]
+  - id: q010
+    question: Do prisons in KwaZulu-Natal have proper perimeter fences?
+    answers: [pmg-committee-question-28886]
+  - id: q011
+    question: Is anyone investigating the unfinished RDP houses in Tonosa, Emfuleni?
+    answers: [pmg-committee-question-2279]
+  - id: q012
+    question: How many black farmers have been supported under the Agriculture and Agro-processing Master Plan?
+    answers: [pmg-committee-question-39749]
+  - id: q013
+    question: Did the housing department help Dunoon residents after the April 2026 floods?
+    answers: [pmg-committee-question-38735]

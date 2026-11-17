@@ -41,6 +41,9 @@ jobs:
       - name: Gold checks
         run: python ingest/tests/test_gold.py
 
+      - name: Eval checks
+        run: python eval/tests/test_retrieval.py
+
       - name: API contract tests
         run: python -m pytest api/tests -q
 

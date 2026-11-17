@@ -16,7 +16,7 @@ GOLD := data/gold
 # gold's output folder carries gold.VERSION, the index version; read it from the code
 GOLD_CQ = $(GOLD)/committee-question/index=$(shell PYTHONPATH=ingest $(PY) -c 'from pmg_ingest.gold import VERSION; print(VERSION)')
 
-.PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure silver gold
+.PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure silver gold eval
 
 help:   ## list targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -27,12 +27,13 @@ venv:   ## create the venv and install dev requirements
 
 # ---- code checks (offline; what CI runs)
 lint:   ## ruff over the Python code
-	$(VENV)/bin/ruff check ingest api
+	$(VENV)/bin/ruff check ingest api eval
 
 test:   ## offline checks
 	$(PY) ingest/tests/test_bronze.py
 	$(PY) ingest/tests/test_silver.py
 	$(PY) ingest/tests/test_gold.py
+	$(PY) eval/tests/test_retrieval.py
 	$(PY) -m pytest api/tests -q
 
 spec:   ## validate the API contract
@@ -68,3 +69,7 @@ gold:            ## silver -> gold chunks JSONL + Parquet (ADR 0004)
 # ---- E: explore
 measure:         ## measurement queries over bronze
 	duckdb < ingest/sql/measure_committee_question.sql
+
+# ---- M: model (retrieval measured against the hand-written eval set)
+eval:            ## BM25 over gold, scored against docs/eval (ADR 0004); writes docs/eval/results/
+	PYTHONPATH=eval $(PY) -m pmg_eval.retrieval --index-dir $(GOLD_CQ)
