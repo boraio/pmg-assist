@@ -33,6 +33,7 @@ test:   ## offline checks
 	$(PY) ingest/tests/test_bronze.py
 	$(PY) ingest/tests/test_silver.py
 	$(PY) ingest/tests/test_gold.py
+	$(PY) eval/tests/test_retrieval.py
 	$(PY) -m pytest api/tests -q
 
 spec:   ## validate the API contract
