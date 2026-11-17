@@ -93,7 +93,24 @@ def report(method, rows, meta):
 
 
 def main(argv=None):
-    raise SystemExit("the evaluation harness is not written yet")
+    ap = argparse.ArgumentParser(description="Evaluate BM25 retrieval over gold chunks (ADR 0004).")
+    ap.add_argument("--index-dir", default=INDEX_DIR, type=Path)
+    ap.add_argument("--questions", default=QUESTIONS, type=Path)
+    ap.add_argument("--out", default=Path("docs/eval/results"), type=Path)
+    args = ap.parse_args(argv)
+    import duckdb  # here, not at the top, so the offline checks never need an index
+
+    con = duckdb.connect(str(args.index_dir / "search.duckdb"))
+    chunks = build_bm25(con, args.index_dir / "chunks.parquet")
+    rows = evaluate(load_questions(args.questions), lambda text: search_bm25(con, text))
+    meta = {"date": dt.date.today().isoformat(), "index": args.index_dir.name, "chunks": chunks,
+            "questions": args.questions}
+    text = report("BM25", rows, meta)
+    out = args.out / f"{meta['date']}-{meta['index']}-bm25.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text)
+    print(text + f"written to {out}")
+    return 0
 
 
 if __name__ == "__main__":
