@@ -43,6 +43,55 @@ def rrf(*rankings, k=60):
     return sorted(scores, key=lambda rid: (-scores[rid], rid))
 
 
+INDEX_DIR = Path("data/gold/committee-question/index=0.1")
+QUESTIONS = Path("docs/eval/committee-question.yaml")
+
+BM25_SQL = f"""
+SELECT record_id, max(score) AS best FROM (
+    SELECT record_id, fts_main_chunks.match_bm25(chunk_id, ?) AS score FROM chunks)
+WHERE score IS NOT NULL GROUP BY record_id ORDER BY best DESC, record_id LIMIT {CUTOFF}
+"""
+
+
+def load_questions(path=QUESTIONS):
+    """The evaluation set: a list of dicts with id, question and answers."""
+    with open(path, encoding="utf-8") as f:
+        return yaml.safe_load(f)["questions"] or []
+
+
+def build_bm25(con, chunks):
+    """Load the gold chunks into con and index their searched text; return the chunk count."""
+    con.execute("INSTALL fts; LOAD fts")
+    con.execute(f"CREATE OR REPLACE TABLE chunks AS SELECT chunk_id, record_id, searched FROM read_parquet('{chunks}')")
+    con.execute("PRAGMA create_fts_index('chunks', 'chunk_id', 'searched', overwrite = 1)")
+    return con.execute("SELECT count(*) FROM chunks").fetchone()[0]
+
+
+def search_bm25(con, text):
+    """Records ranked by their best chunk's BM25 score, best first, at most CUTOFF of them."""
+    return [row[0] for row in con.execute(BM25_SQL, [text]).fetchall()]
+
+
+def evaluate(questions, search):
+    """(id, question, rank) for each answerable question, using search(text) -> ranked record ids."""
+    return [(q["id"], q["question"], first_rank(search(q["question"]), q["answers"]))
+            for q in questions if q.get("answers")]
+
+
+def report(method, rows, meta):
+    """The results file: setup, Recall@5, MRR and every question's rank, as Markdown."""
+    ranks = [rank for _, _, rank in rows]
+    lines = [f"# Retrieval evaluation: {method}, {meta['date']}", "",
+             f"- Index: {meta['index']}, {meta['chunks']:,} chunks",
+             f"- Questions: {len(rows)} answerable, from {meta['questions']}",
+             f"- Recall@{TOP_K}: {recall_at(ranks):.2f}",
+             f"- MRR (cutoff {CUTOFF}): {mrr(ranks):.2f}", "",
+             "| Question | Rank |", "|---|---|"]
+    lines += [f"| {qid} {text.replace('|', '/')} | {rank if rank else f'not in the top {CUTOFF}'} |"
+              for qid, text, rank in rows]
+    return "\n".join(lines) + "\n"
+
+
 def main(argv=None):
     raise SystemExit("the evaluation harness is not written yet")
 
