@@ -4,6 +4,7 @@ Run: python eval/tests/test_retrieval.py   (prints PASS/FAIL lines, exits 1 on a
 """
 
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
