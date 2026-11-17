@@ -27,7 +27,7 @@ venv:   ## create the venv and install dev requirements
 
 # ---- code checks (offline; what CI runs)
 lint:   ## ruff over the Python code
-	$(VENV)/bin/ruff check ingest api
+	$(VENV)/bin/ruff check ingest api eval
 
 test:   ## offline checks
 	$(PY) ingest/tests/test_bronze.py
