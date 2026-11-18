@@ -41,3 +41,39 @@ questions:
   - id: q013
     question: Did the housing department help Dunoon residents after the April 2026 floods?
     answers: [pmg-committee-question-38735]
+  - id: q014
+    question: Has the electoral commission been investigated, apart from its normal yearly audit?
+    answers: [pmg-committee-question-8070]
+  - id: q015
+    question: Is history going to become a compulsory school subject?
+    answers: [pmg-committee-question-9500]
+  - id: q016
+    question: How many consultants does the housing department use?
+    answers: [pmg-committee-question-11597]
+  - id: q017
+    question: Where are the riot police units based, and how many officers do they have?
+    answers: [pmg-committee-question-13311]
+  - id: q018
+    question: How many government jobs are vacant?
+    answers: [pmg-committee-question-18142]
+  - id: q019
+    question: What irregular spending did the Public Protector find at the arts and culture department?
+    answers: [pmg-committee-question-23833]
+  - id: q020
+    question: Will Home Affairs send another mobile office to the Graaff-Reinet area?
+    answers: [pmg-committee-question-26683]
+  - id: q021
+    question: Who is responsible for fixing power cuts in Johannesburg?
+    answers: [pmg-committee-question-29766]
+  - id: q022
+    question: Is there still a backlog in police DNA testing for rape cases?
+    answers: [pmg-committee-question-30680]
+  - id: q023
+    question: Which suburbs does the Brackendowns police station cover?
+    answers: [pmg-committee-question-32868]
+  - id: q024
+    question: What is Home Affairs doing about people selling places in the queue?
+    answers: [pmg-committee-question-36744]
+  - id: q025
+    question: Is South Africa joining the international coalition to prevent atrocities in Sudan?
+    answers: [pmg-committee-question-38464]
