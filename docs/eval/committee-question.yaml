@@ -28,7 +28,7 @@ questions:
     answers: [pmg-committee-question-3962]
   - id: q009
     question: What is the education department doing about overcrowded public schools?
-    answers: [pmg-committee-question-32760]
+    answers: [pmg-committee-question-32760, pmg-committee-question-21840, pmg-committee-question-38175, pmg-committee-question-24550]
   - id: q010
     question: Do prisons in KwaZulu-Natal have proper perimeter fences?
     answers: [pmg-committee-question-28886]
@@ -67,7 +67,7 @@ questions:
     answers: [pmg-committee-question-29766]
   - id: q022
     question: Is there still a backlog in police DNA testing for rape cases?
-    answers: [pmg-committee-question-30680]
+    answers: [pmg-committee-question-30680, pmg-committee-question-39361, pmg-committee-question-39382]
   - id: q023
     question: Which suburbs does the Brackendowns police station cover?
     answers: [pmg-committee-question-32868]
@@ -97,10 +97,10 @@ questions:
     answers: [pmg-committee-question-22423]
   - id: q032
     question: What is being done about staff shortages in prisons?
-    answers: [pmg-committee-question-27677]
+    answers: [pmg-committee-question-27677, pmg-committee-question-30150]
   - id: q033
     question: Are wind farms in the Eastern Cape a threat to vultures?
-    answers: [pmg-committee-question-30134]
+    answers: [pmg-committee-question-30134, pmg-committee-question-5598]
   - id: q034
     question: Why do some communities have water pipes but no water?
     answers: [pmg-committee-question-32381]
