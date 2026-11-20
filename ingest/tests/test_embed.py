@@ -3,7 +3,9 @@
 Run: python ingest/tests/test_embed.py   (prints PASS/FAIL lines, exits 1 on any FAIL)
 """
 
+import json
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
