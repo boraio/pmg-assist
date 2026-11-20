@@ -16,6 +16,50 @@ THREADS = 8  # fastest on nia in the 2026-11-20 benchmark
 BATCH = 8
 
 
+def model_slug(name=MODEL):
+    """The part of a model name used in file names: "BAAI/bge-small-en-v1.5" -> "bge-small-en-v1.5"."""
+    return name.rsplit("/", 1)[-1]
+
+
+def resume(partial):
+    """Ids already embedded in a partial output, after dropping a half-written last line.
+
+    The file is rewritten with only its complete lines, so appending to it is safe.
+    """
+    if not partial.exists():
+        return set()
+    lines = []
+    for line in partial.read_text(encoding="utf-8").splitlines():
+        try:
+            lines.append((json.loads(line)["chunk_id"], line))
+        except (json.JSONDecodeError, KeyError):
+            break
+    partial.write_text("".join(text + "\n" for _, text in lines), encoding="utf-8")
+    return {cid for cid, _ in lines}
+
+
+def embed_all(chunks, encode, out, batch=BATCH, every=500, report=print):
+    """Write {"chunk_id", "embedding"} for every chunk to out, resuming a partial run.
+
+    encode(texts) returns one vector per text. Values are rounded to 6 decimals,
+    far below what changes a ranking, to keep the file small. Returns how many
+    chunks were already done and how many were embedded now.
+    """
+    partial = out.with_name(out.name + ".partial")
+    done = resume(partial)
+    todo = [c for c in chunks if c["chunk_id"] not in done]
+    with partial.open("a", encoding="utf-8") as f:
+        for start in range(0, len(todo), batch):
+            group = todo[start:start + batch]
+            for c, vec in zip(group, encode([c["searched"] for c in group])):
+                f.write(json.dumps({"chunk_id": c["chunk_id"], "embedding": [round(float(x), 6) for x in vec]}) + "\n")
+            if (start // batch) % every == every - 1:
+                f.flush()
+                report(f"{len(done) + start + len(group)} of {len(chunks)} chunks embedded")
+    partial.replace(out)
+    return len(done), len(todo)
+
+
 def main(argv=None):
     raise SystemExit("the embedding step is not written yet")
 
