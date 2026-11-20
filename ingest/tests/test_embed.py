@@ -23,6 +23,38 @@ def check(label, got, want):
 def main():
     check("first model and the measured settings", (e.MODEL, e.THREADS, e.BATCH), ("BAAI/bge-small-en-v1.5", 8, 8))
 
+    check("model slug for file names", e.model_slug("BAAI/bge-small-en-v1.5"), "bge-small-en-v1.5")
+
+    # embed_all with a fake encoder: a 2-number vector per text
+    chunks = [{"chunk_id": f"r#{i}", "searched": "x" * i} for i in range(1, 6)]
+    seen = []
+
+    def fake(texts):
+        seen.extend(texts)
+        return [[len(t), 0.12345678] for t in texts]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "emb=test.jsonl"
+        notes = []
+        got = e.embed_all(chunks, fake, out, batch=2, every=1, report=notes.append)
+        lines = [json.loads(x) for x in out.read_text().splitlines()]
+        check("every chunk embedded once, in order", [x["chunk_id"] for x in lines], [c["chunk_id"] for c in chunks])
+        check("values rounded to 6 decimals", lines[0]["embedding"], [1.0, 0.123457])
+        check("counts: nothing done before, 5 now", got, (0, 5))
+        check("progress reported per batch when every=1", notes[-1], "5 of 5 chunks embedded")
+        check("no partial file left behind", sorted(p.name for p in Path(tmp).iterdir()), ["emb=test.jsonl"])
+
+        # a run that stopped part-way: 2 complete lines and a half-written third
+        out2 = Path(tmp) / "emb=resume.jsonl"
+        partial = Path(tmp) / "emb=resume.jsonl.partial"
+        partial.write_text('{"chunk_id": "r#1", "embedding": [1.0]}\n{"chunk_id": "r#2", "embedding": [2.0]}\n{"chunk_')
+        seen.clear()
+        got = e.embed_all(chunks, fake, out2, batch=2, report=notes.append)
+        ids = [json.loads(x)["chunk_id"] for x in out2.read_text().splitlines()]
+        check("a resumed run embeds only what is missing", seen, ["xxx", "xxxx", "xxxxx"])
+        check("the half-written line is dropped, nothing doubled", ids, ["r#1", "r#2", "r#3", "r#4", "r#5"])
+        check("counts: 2 done before, 3 now", got, (2, 3))
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 
