@@ -6,8 +6,13 @@ left off. PyTorch and sentence-transformers are imported only when a model is
 loaded, so the offline checks run without them.
 """
 
+import argparse
 import json
 import sys
+import time
+from pathlib import Path
+
+from . import bronze
 
 MODEL = "BAAI/bge-small-en-v1.5"
 # The maintainers' retrieval prefix for bge-small: questions get it, chunks do not.
