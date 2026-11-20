@@ -16,6 +16,12 @@ GOLD := data/gold
 # gold's output folder carries gold.VERSION, the index version; read it from the code
 GOLD_CQ = $(GOLD)/committee-question/index=$(shell PYTHONPATH=ingest $(PY) -c 'from pmg_ingest.gold import VERSION; print(VERSION)')
 
+EMBVENV := .embvenv
+# the embedding file's name comes from the code (pmg_ingest.embed.MODEL)
+EMB_SLUG = $(shell PYTHONPATH=ingest $(PY) -c 'from pmg_ingest.embed import model_slug; print(model_slug())')
+EMB_JSONL = $(GOLD_CQ)/emb=$(EMB_SLUG).jsonl
+EMB_PARQUET = $(GOLD_CQ)/emb=$(EMB_SLUG).parquet
+
 .PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure silver gold eval
 
 help:   ## list targets
