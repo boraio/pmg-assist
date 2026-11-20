@@ -55,6 +55,20 @@ def main():
         check("the half-written line is dropped, nothing doubled", ids, ["r#1", "r#2", "r#3", "r#4", "r#5"])
         check("counts: 2 done before, 3 now", got, (2, 3))
 
+    # run: reads chunks.jsonl, writes the embeddings and a marker beside them
+    with tempfile.TemporaryDirectory() as tmp:
+        idx = Path(tmp)
+        (idx / "chunks.jsonl").write_text("".join(json.dumps(c) + "\n" for c in chunks))
+        info = {"model": "BAAI/bge-small-en-v1.5", "dimensions": 2, "max_seq_length": 512, "threads": 8, "batch": 2}
+        m = e.run(idx, fake, info, batch=2)
+        check("output and marker are named after the model",
+              sorted(p.name for p in idx.iterdir()),
+              ["_emb=bge-small-en-v1.5.json", "chunks.jsonl", "emb=bge-small-en-v1.5.jsonl"])
+        check("the marker records model, prefix and counts",
+              (m["model"], m["query_prefix"], m["chunks"], m["embedded_before"], m["embedded_now"]),
+              ("BAAI/bge-small-en-v1.5", e.QUERY_PREFIX, 5, 0, 5))
+        check("marker on disk matches", json.loads((idx / "_emb=bge-small-en-v1.5.json").read_text()), m)
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 
