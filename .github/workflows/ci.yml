@@ -41,6 +41,9 @@ jobs:
       - name: Gold checks
         run: python ingest/tests/test_gold.py
 
+      - name: Embed checks
+        run: python ingest/tests/test_embed.py
+
       - name: Eval checks
         run: python eval/tests/test_retrieval.py
 
