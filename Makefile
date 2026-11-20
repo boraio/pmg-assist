@@ -22,7 +22,7 @@ EMB_SLUG = $(shell PYTHONPATH=ingest $(PY) -c 'from pmg_ingest.embed import mode
 EMB_JSONL = $(GOLD_CQ)/emb=$(EMB_SLUG).jsonl
 EMB_PARQUET = $(GOLD_CQ)/emb=$(EMB_SLUG).parquet
 
-.PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure silver gold eval
+.PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure silver gold eval embed-venv embed
 
 help:   ## list targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
