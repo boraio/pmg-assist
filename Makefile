@@ -39,6 +39,7 @@ test:   ## offline checks
 	$(PY) ingest/tests/test_bronze.py
 	$(PY) ingest/tests/test_silver.py
 	$(PY) ingest/tests/test_gold.py
+	$(PY) ingest/tests/test_embed.py
 	$(PY) eval/tests/test_retrieval.py
 	$(PY) -m pytest api/tests -q
 
