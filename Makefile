@@ -73,6 +73,15 @@ gold:            ## silver -> gold chunks JSONL + Parquet (ADR 0004)
 	duckdb -c "COPY (SELECT * FROM read_json('$(GOLD_CQ)/chunks.jsonl', format = 'newline_delimited', sample_size = -1, maximum_object_size = 268435456)) TO '$(GOLD_CQ)/chunks.parquet' (FORMAT parquet, COMPRESSION zstd)"
 	duckdb -c "SELECT count(*) AS chunks, count(DISTINCT record_id) AS records, max(length(text)) AS longest, count(*) FILTER (WHERE length(text) > 1500) AS over_limit FROM '$(GOLD_CQ)/chunks.parquet'"
 
+embed-venv:      ## separate venv for embeddings: PyTorch (CPU) + sentence-transformers, never used in CI
+	python3.12 -m venv $(EMBVENV)
+	$(EMBVENV)/bin/pip install -r ingest/requirements-embed.txt
+
+embed:           ## gold chunks -> embeddings JSONL + Parquet (ADR 0004; about 80 min on nia, resumable)
+	PYTHONPATH=ingest $(EMBVENV)/bin/python -m pmg_ingest.embed --index-dir $(GOLD_CQ)
+	duckdb -c "COPY (SELECT chunk_id, embedding FROM read_json('$(EMB_JSONL)', format = 'newline_delimited', columns = {'chunk_id': 'VARCHAR', 'embedding': 'FLOAT[]'})) TO '$(EMB_PARQUET)' (FORMAT parquet, COMPRESSION zstd)"
+	duckdb -c "SELECT count(*) AS chunks, min(len(embedding)) AS dims_min, max(len(embedding)) AS dims_max FROM '$(EMB_PARQUET)'"
+
 # ---- E: explore
 measure:         ## measurement queries over bronze
 	duckdb < ingest/sql/measure_committee_question.sql
