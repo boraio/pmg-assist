@@ -65,6 +65,24 @@ def embed_all(chunks, encode, out, batch=BATCH, every=500, report=print):
     return len(done), len(todo)
 
 
+def run(index_dir, encode, info, batch=BATCH):
+    """Embed index_dir's chunks with encode and write a marker beside the output.
+
+    info describes the model and settings (model, dimensions, max_seq_length,
+    threads, batch); the marker adds counts and the time taken.
+    """
+    index_dir = Path(index_dir)
+    with (index_dir / "chunks.jsonl").open(encoding="utf-8") as f:
+        chunks = [json.loads(line) for line in f]
+    slug = model_slug(info["model"])
+    t = time.time()
+    before, now = embed_all(chunks, encode, index_dir / f"emb={slug}.jsonl", batch)
+    marker = dict(info, query_prefix=QUERY_PREFIX, chunks=len(chunks), embedded_before=before,
+                  embedded_now=now, seconds=round(time.time() - t))
+    bronze.write_atomic(index_dir / f"_emb={slug}.json", json.dumps(marker, indent=2).encode())
+    return marker
+
+
 def main(argv=None):
     raise SystemExit("the embedding step is not written yet")
 
