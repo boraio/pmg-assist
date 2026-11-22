@@ -4,4 +4,5 @@
 !api/requirements.txt
 !api/pmg_api/
 !docs/api.openapi.yaml
+!ingest/pmg_ingest/
 **/__pycache__
