@@ -66,7 +66,7 @@ def embed_all(chunks, encode, out, batch=BATCH, every=500, report=print):
     return len(done), len(todo)
 
 
-def run(index_dir, encode, info, batch=BATCH):
+def run(index_dir, encode, info, group=GROUP):
     """Embed index_dir's chunks with encode and write a marker beside the output.
 
     info describes the model and settings (model, dimensions, max_seq_length,
