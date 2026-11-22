@@ -85,21 +85,23 @@ def run(index_dir, encode, info, group=GROUP):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Embed gold chunks for vector search (ADR 0004).")
+    ap = argparse.ArgumentParser(description="Embed gold chunks for vector search (ADR 0004, ADR 0005).")
     ap.add_argument("--index-dir", default=Path("data/gold/committee-question/index=0.1"), type=Path)
     ap.add_argument("--model", default=MODEL)
     ap.add_argument("--threads", default=THREADS, type=int)
     ap.add_argument("--batch", default=BATCH, type=int)
+    ap.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
     args = ap.parse_args(argv)
     import torch  # here, not at the top, so the offline checks never need PyTorch
     from sentence_transformers import SentenceTransformer
 
     torch.set_num_threads(args.threads)
-    model = SentenceTransformer(args.model, device="cpu")
+    model = SentenceTransformer(args.model, device=args.device)
     info = {"model": args.model, "dimensions": model.get_embedding_dimension(),
-            "max_seq_length": model.max_seq_length, "threads": args.threads, "batch": args.batch}
+            "max_seq_length": model.max_seq_length, "device": args.device, "threads": args.threads,
+            "batch": args.batch}
     m = run(args.index_dir, lambda texts: model.encode(texts, batch_size=args.batch, normalize_embeddings=True,
-                                                        show_progress_bar=False), info, args.batch)
+                                                        show_progress_bar=False), info)
     print(f"embedded {m['embedded_now']} chunks ({m['embedded_before']} already done) "
           f"of {m['chunks']} in {m['seconds']} s")
     return 0
