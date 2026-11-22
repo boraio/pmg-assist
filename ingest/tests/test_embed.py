@@ -60,7 +60,7 @@ def main():
         idx = Path(tmp)
         (idx / "chunks.jsonl").write_text("".join(json.dumps(c) + "\n" for c in chunks))
         info = {"model": "BAAI/bge-small-en-v1.5", "dimensions": 2, "max_seq_length": 512, "threads": 8, "batch": 2}
-        m = e.run(idx, fake, info, batch=2)
+        m = e.run(idx, fake, info, group=2)
         check("output and marker are named after the model",
               sorted(p.name for p in idx.iterdir()),
               ["_emb=bge-small-en-v1.5.json", "chunks.jsonl", "emb=bge-small-en-v1.5.jsonl"])
