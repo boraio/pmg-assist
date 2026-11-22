@@ -5,7 +5,8 @@
 FROM pytorch/pytorch:2.15.0-cuda13.4-cudnn9-runtime
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app/ingest HF_HOME=/data/hf
 WORKDIR /app
-RUN pip install --no-cache-dir sentence-transformers==6.3.0
+RUN pip install --no-cache-dir --break-system-packages sentence-transformers==6.3.0 \
+ && python3 -c "import torch, sentence_transformers as s; assert torch.__version__.startswith('2.15.0'), torch.__version__; print(torch.__version__, torch.version.cuda, s.__version__)"
 COPY ingest/pmg_ingest ingest/pmg_ingest
 RUN useradd --system --uid 10001 app
 USER 10001
