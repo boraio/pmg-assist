@@ -21,7 +21,7 @@ def check(label, got, want):
 
 
 def main():
-    check("first model and the measured settings", (e.MODEL, e.THREADS, e.BATCH), ("BAAI/bge-small-en-v1.5", 8, 8))
+    check("first model and the measured settings", (e.MODEL, e.THREADS, e.BATCH, e.GROUP), ("BAAI/bge-small-en-v1.5", 8, 8, 512))
 
     check("model slug for file names", e.model_slug("BAAI/bge-small-en-v1.5"), "bge-small-en-v1.5")
 
