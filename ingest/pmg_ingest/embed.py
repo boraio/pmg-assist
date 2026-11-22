@@ -19,6 +19,7 @@ MODEL = "BAAI/bge-small-en-v1.5"
 QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 THREADS = 8  # fastest on nia in the 2026-11-20 benchmark
 BATCH = 8
+GROUP = 512  # chunks handed to the model per call, so it can sort them by length (ADR 0005)
 
 
 def model_slug(name=MODEL):
