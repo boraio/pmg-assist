@@ -1,0 +1,47 @@
+# The data volume for GPU batch Jobs and a helper pod to copy files in and out
+# (ADR 0005). Both are pinned to zeru so they can share the volume with a Job.
+#   kubectl apply -f infra/k8s/embed-data.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pmg-data
+  namespace: pmg-assist
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ceph-xfs
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pmg-data
+  namespace: pmg-assist
+  labels:
+    app: pmg-data
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: zeru
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  containers:
+    - name: shell
+      image: busybox:1.37
+      command: ["sh", "-c", "while true; do sleep 3600; done"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 64Mi
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: pmg-data
