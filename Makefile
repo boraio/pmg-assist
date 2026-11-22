@@ -78,7 +78,7 @@ embed-venv:      ## separate venv for embeddings: PyTorch (CPU) + sentence-trans
 	$(EMBVENV)/bin/pip install -r ingest/requirements-embed.txt
 
 embed:           ## gold chunks -> embeddings JSONL + Parquet (ADR 0004; about 80 min on nia, resumable)
-	PYTHONPATH=ingest $(EMBVENV)/bin/python -m pmg_ingest.embed --index-dir $(GOLD_CQ)
+	PYTHONUNBUFFERED=1 PYTHONPATH=ingest $(EMBVENV)/bin/python -m pmg_ingest.embed --index-dir $(GOLD_CQ)
 	duckdb -c "COPY (SELECT chunk_id, embedding FROM read_json('$(EMB_JSONL)', format = 'newline_delimited', columns = {'chunk_id': 'VARCHAR', 'embedding': 'FLOAT[]'})) TO '$(EMB_PARQUET)' (FORMAT parquet, COMPRESSION zstd)"
 	duckdb -c "SELECT count(*) AS chunks, min(len(embedding)) AS dims_min, max(len(embedding)) AS dims_max FROM '$(EMB_PARQUET)'"
 
