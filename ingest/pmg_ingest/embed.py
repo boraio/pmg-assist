@@ -77,7 +77,7 @@ def run(index_dir, encode, info, group=GROUP):
         chunks = [json.loads(line) for line in f]
     slug = model_slug(info["model"])
     t = time.time()
-    before, now = embed_all(chunks, encode, index_dir / f"emb={slug}.jsonl", batch)
+    before, now = embed_all(chunks, encode, index_dir / f"emb={slug}.jsonl", group, every=10)
     marker = dict(info, query_prefix=QUERY_PREFIX, chunks=len(chunks), embedded_before=before,
                   embedded_now=now, seconds=round(time.time() - t))
     bronze.write_atomic(index_dir / f"_emb={slug}.json", json.dumps(marker, indent=2).encode())
