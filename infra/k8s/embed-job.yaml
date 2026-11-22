@@ -32,7 +32,7 @@ spec:
           args:
             - >-
               nvidia-smi --query-gpu=index,uuid,name,memory.used,memory.total --format=csv || true;
-              exec python -m pmg_ingest.embed --index-dir /data/index=0.1 --device cuda --threads 4 --batch 64
+              exec python3 -m pmg_ingest.embed --index-dir /data/index=0.1 --device cuda --threads 4 --batch 64
           resources:
             requests:
               cpu: "2"
