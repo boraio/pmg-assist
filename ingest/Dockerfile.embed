@@ -10,4 +10,4 @@ RUN pip install --no-cache-dir --break-system-packages sentence-transformers==6.
 COPY ingest/pmg_ingest ingest/pmg_ingest
 RUN useradd --system --uid 10001 app
 USER 10001
-ENTRYPOINT ["python", "-m", "pmg_ingest.embed"]
+ENTRYPOINT ["python3", "-m", "pmg_ingest.embed"]
