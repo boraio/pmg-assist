@@ -87,5 +87,5 @@ measure:         ## measurement queries over bronze
 	duckdb < ingest/sql/measure_committee_question.sql
 
 # ---- M: model (retrieval measured against the hand-written eval set)
-eval:            ## BM25 over gold, scored against docs/eval (ADR 0004); writes docs/eval/results/
-	PYTHONPATH=eval $(PY) -m pmg_eval.retrieval --index-dir $(GOLD_CQ)
+eval:            ## BM25, vector and fused search over gold, scored against docs/eval (ADR 0004); writes docs/eval/results/
+	PYTHONPATH=eval $(EMBVENV)/bin/python -m pmg_eval.retrieval --index-dir $(GOLD_CQ) --vectors $(EMB_SLUG)
