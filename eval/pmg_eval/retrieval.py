@@ -67,6 +67,11 @@ def build_bm25(con, chunks):
     return con.execute("SELECT count(*) FROM chunks").fetchone()[0]
 
 
+def search_bm25(con, text):
+    """Records ranked by their best chunk's BM25 score, best first, at most CUTOFF of them."""
+    return [row[0] for row in con.execute(BM25_SQL, [text]).fetchall()]
+
+
 def vector_sql(dims):
     """Records ranked by their best chunk's cosine similarity to a query vector of dims floats."""
     return f"""
@@ -82,9 +87,17 @@ def build_vectors(con, chunks, emb, dims):
     return con.execute("SELECT count(*) FROM emb").fetchone()[0]
 
 
-def search_bm25(con, text):
-    """Records ranked by their best chunk's BM25 score, best first, at most CUTOFF of them."""
-    return [row[0] for row in con.execute(BM25_SQL, [text]).fetchall()]
+def search_vector(con, vec, dims):
+    """Records ranked by their best chunk's cosine similarity to vec, best first, at most CUTOFF of them.
+
+    Exact: every chunk is compared, so no approximate index (vss) is needed at this size.
+    """
+    return [row[0] for row in con.execute(vector_sql(dims), [vec]).fetchall()]
+
+
+def fuse(bm25, vector):
+    """The hybrid ranking (ADR 0004, decision 3): the two rankings fused by RRF, at most CUTOFF records."""
+    return rrf(bm25, vector)[:CUTOFF]
 
 
 def evaluate(questions, search):
