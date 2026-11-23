@@ -7,6 +7,8 @@ reports Recall@5 and MRR.
 
 import argparse
 import datetime as dt
+import functools
+import json
 import sys
 from pathlib import Path
 
