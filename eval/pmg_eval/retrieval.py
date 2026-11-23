@@ -146,20 +146,41 @@ def compare(results, meta):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Evaluate BM25 retrieval over gold chunks (ADR 0004).")
+    ap = argparse.ArgumentParser(description="Evaluate retrieval over gold chunks (ADR 0004).")
     ap.add_argument("--index-dir", default=INDEX_DIR, type=Path)
     ap.add_argument("--questions", default=QUESTIONS, type=Path)
     ap.add_argument("--out", default=Path("docs/eval/results"), type=Path)
+    ap.add_argument("--vectors", metavar="SLUG", help="also score vector and fused search, using emb=SLUG.parquet")
     args = ap.parse_args(argv)
     import duckdb  # here, not at the top, so the offline checks never need an index
 
     con = duckdb.connect(str(args.index_dir / "search.duckdb"))
     chunks = build_bm25(con, args.index_dir / "chunks.parquet")
-    rows = evaluate(load_questions(args.questions), lambda text: search_bm25(con, text))
+    questions = load_questions(args.questions)
     meta = {"date": dt.date.today().isoformat(), "index": args.index_dir.name, "chunks": chunks,
             "questions": args.questions}
-    text = report("BM25", rows, meta)
-    out = args.out / f"{meta['date']}-{meta['index']}-bm25.md"
+    bm25 = functools.cache(lambda text: search_bm25(con, text))
+    if not args.vectors:
+        text = report("BM25", evaluate(questions, bm25), meta)
+        out = args.out / f"{meta['date']}-{meta['index']}-bm25.md"
+    else:
+        # only the embedding venv has sentence-transformers
+        from sentence_transformers import SentenceTransformer
+
+        info = json.loads((args.index_dir / f"_emb={args.vectors}.json").read_text())
+        dims = info["dimensions"]
+        vcon = duckdb.connect()
+        n = build_vectors(vcon, args.index_dir / "chunks.parquet", args.index_dir / f"emb={args.vectors}.parquet", dims)
+        if n != chunks:
+            return f"{n:,} vectors for {chunks:,} chunks: embed this index again, or rebuild its Parquet"
+        model = SentenceTransformer(info["model"], device="cpu")
+        vector = functools.cache(lambda text: search_vector(
+            vcon, model.encode(info["query_prefix"] + text, normalize_embeddings=True).tolist(), dims))
+        meta["embeddings"] = (f"{info['model']}, {dims} dimensions; chunks embedded on {info.get('device', 'cpu')}, "
+                              "questions on cpu; exact cosine search over every chunk, no approximate index")
+        searches = {"BM25": bm25, "vector": vector, "fused (RRF)": lambda text: fuse(bm25(text), vector(text))}
+        text = compare({name: evaluate(questions, search) for name, search in searches.items()}, meta)
+        out = args.out / f"{meta['date']}-{meta['index']}-hybrid.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text)
     print(text + f"written to {out}")
