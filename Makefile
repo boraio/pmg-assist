@@ -16,7 +16,13 @@ GOLD := data/gold
 # gold's output folder carries gold.VERSION, the index version; read it from the code
 GOLD_CQ = $(GOLD)/committee-question/index=$(shell PYTHONPATH=ingest $(PY) -c 'from pmg_ingest.gold import VERSION; print(VERSION)')
 
-.PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure silver gold eval
+EMBVENV := .embvenv
+# the embedding file's name comes from the code (pmg_ingest.embed.MODEL)
+EMB_SLUG = $(shell PYTHONPATH=ingest $(PY) -c 'from pmg_ingest.embed import model_slug; print(model_slug())')
+EMB_JSONL = $(GOLD_CQ)/emb=$(EMB_SLUG).jsonl
+EMB_PARQUET = $(GOLD_CQ)/emb=$(EMB_SLUG).parquet
+
+.PHONY: help venv lint test spec check api bronze-status bronze-plan bronze measure silver gold eval embed-venv embed
 
 help:   ## list targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -33,6 +39,7 @@ test:   ## offline checks
 	$(PY) ingest/tests/test_bronze.py
 	$(PY) ingest/tests/test_silver.py
 	$(PY) ingest/tests/test_gold.py
+	$(PY) ingest/tests/test_embed.py
 	$(PY) eval/tests/test_retrieval.py
 	$(PY) -m pytest api/tests -q
 
@@ -66,10 +73,19 @@ gold:            ## silver -> gold chunks JSONL + Parquet (ADR 0004)
 	duckdb -c "COPY (SELECT * FROM read_json('$(GOLD_CQ)/chunks.jsonl', format = 'newline_delimited', sample_size = -1, maximum_object_size = 268435456)) TO '$(GOLD_CQ)/chunks.parquet' (FORMAT parquet, COMPRESSION zstd)"
 	duckdb -c "SELECT count(*) AS chunks, count(DISTINCT record_id) AS records, max(length(text)) AS longest, count(*) FILTER (WHERE length(text) > 1500) AS over_limit FROM '$(GOLD_CQ)/chunks.parquet'"
 
+embed-venv:      ## separate venv for embeddings: PyTorch (CPU) + sentence-transformers, never used in CI
+	python3.12 -m venv $(EMBVENV)
+	$(EMBVENV)/bin/pip install -r ingest/requirements-embed.txt
+
+embed:           ## gold chunks -> embeddings JSONL + Parquet (ADR 0004; about 80 min on nia, resumable)
+	PYTHONUNBUFFERED=1 PYTHONPATH=ingest $(EMBVENV)/bin/python -m pmg_ingest.embed --index-dir $(GOLD_CQ)
+	duckdb -c "COPY (SELECT chunk_id, embedding FROM read_json('$(EMB_JSONL)', format = 'newline_delimited', columns = {'chunk_id': 'VARCHAR', 'embedding': 'FLOAT[]'})) TO '$(EMB_PARQUET)' (FORMAT parquet, COMPRESSION zstd)"
+	duckdb -c "SELECT count(*) AS chunks, min(len(embedding)) AS dims_min, max(len(embedding)) AS dims_max FROM '$(EMB_PARQUET)'"
+
 # ---- E: explore
 measure:         ## measurement queries over bronze
 	duckdb < ingest/sql/measure_committee_question.sql
 
 # ---- M: model (retrieval measured against the hand-written eval set)
-eval:            ## BM25 over gold, scored against docs/eval (ADR 0004); writes docs/eval/results/
-	PYTHONPATH=eval $(PY) -m pmg_eval.retrieval --index-dir $(GOLD_CQ)
+eval:            ## BM25, vector and fused search over gold, scored against docs/eval (ADR 0004); writes docs/eval/results/
+	PYTHONPATH=eval $(EMBVENV)/bin/python -m pmg_eval.retrieval --index-dir $(GOLD_CQ) --vectors $(EMB_SLUG)

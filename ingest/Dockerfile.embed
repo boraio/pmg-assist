@@ -1,0 +1,13 @@
+# GPU image for the embedding Job (ADR 0005). Build from the repo root:
+#   docker build -f ingest/Dockerfile.embed -t pmg-assist-embed .
+# PyTorch and CUDA come from the base image; the model downloads at run time
+# into HF_HOME on the data volume, so no weights are baked in.
+FROM pytorch/pytorch:2.15.0-cuda13.4-cudnn9-runtime
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app/ingest HF_HOME=/data/hf
+WORKDIR /app
+RUN pip install --no-cache-dir --break-system-packages sentence-transformers==6.3.0 \
+ && python3 -c "import torch, sentence_transformers as s; assert torch.__version__.startswith('2.15.0'), torch.__version__; print(torch.__version__, torch.version.cuda, s.__version__)"
+COPY ingest/pmg_ingest ingest/pmg_ingest
+RUN useradd --system --uid 10001 app
+USER 10001
+ENTRYPOINT ["python3", "-m", "pmg_ingest.embed"]

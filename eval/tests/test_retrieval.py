@@ -60,6 +60,34 @@ def main():
     check("the chunk count is shown with separators", "149,067 chunks" in text, True)
     check("BM25 search keeps at most CUTOFF records", "LIMIT 20" in r.BM25_SQL, True)
 
+    # vector search and fusion, with fake three-dimensional vectors in DuckDB (no model, no index)
+    check("vector search keeps at most CUTOFF records", "LIMIT 20" in r.vector_sql(384), True)
+    check("vector search fixes the vector size", "FLOAT[384]" in r.vector_sql(384), True)
+    check("fused search keeps at most CUTOFF records", len(r.fuse([f"a{i}" for i in range(30)], [f"b{i}" for i in range(30)])), 20)
+    check("fused search puts a record high in both lists first", r.fuse(["x", "y"], ["y", "z"])[0], "y")
+    import duckdb
+
+    with tempfile.TemporaryDirectory() as tmp:
+        con = duckdb.connect()
+        con.execute("COPY (SELECT * FROM (VALUES ('c1', 'r1', 'x'), ('c2', 'r1', 'y'), ('c3', 'r2', 'z'), ('c4', 'r3', 'w')) "
+                    f"t(chunk_id, record_id, searched)) TO '{tmp}/chunks.parquet' (FORMAT parquet)")
+        con.execute("COPY (SELECT chunk_id, embedding::FLOAT[] AS embedding FROM (VALUES ('c1', [1.0, 0.0, 0.0]), "
+                    "('c2', [0.0, 1.0, 0.0]), ('c3', [0.6, 0.8, 0.0]), ('c4', [0.0, 0.0, 1.0])) t(chunk_id, embedding)) "
+                    f"TO '{tmp}/emb.parquet' (FORMAT parquet)")
+        check("every chunk vector is loaded with its record", r.build_vectors(con, f"{tmp}/chunks.parquet", f"{tmp}/emb.parquet", 3), 4)
+        check("records are ranked by their best chunk, not their total",
+              r.search_vector(con, [0.6, 0.8, 0.0], 3), ["r2", "r1", "r3"])
+        check("vector ties are broken by record id", r.search_vector(con, [0.0, 0.0, 1.0], 3), ["r3", "r1", "r2"])
+
+    # the side-by-side report for several methods, reusing the rows scored above
+    text = r.compare({"BM25": rows, "vector": [("q1", "A?", 1), ("q2", "B | C?", 3)]},
+                     dict(meta, embeddings="fake, 3 dimensions"))
+    check("the comparison scores every method",
+          ("| BM25 | 0.50 | 0.25 |" in text, "| vector | 1.00 | 0.67 |" in text), (True, True))
+    check("the comparison names the embeddings", "- Embeddings: fake, 3 dimensions" in text, True)
+    check("each question's ranks sit side by side", "| q1 A? | 2 | 1 |" in text, True)
+    check("a missing rank shows as a dash", "| q2 B / C? | - | 3 |" in text, True)
+
     print(f"\n{RESULTS['PASS']} PASS, {RESULTS['FAIL']} FAIL")
     return 1 if RESULTS["FAIL"] else 0
 

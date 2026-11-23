@@ -7,6 +7,8 @@ reports Recall@5 and MRR.
 
 import argparse
 import datetime as dt
+import functools
+import json
 import sys
 from pathlib import Path
 
@@ -72,6 +74,34 @@ def search_bm25(con, text):
     return [row[0] for row in con.execute(BM25_SQL, [text]).fetchall()]
 
 
+def vector_sql(dims):
+    """Records ranked by their best chunk's cosine similarity to a query vector of dims floats."""
+    return f"""
+SELECT record_id, max(array_cosine_similarity(embedding, ?::FLOAT[{dims}])) AS best FROM emb
+GROUP BY record_id ORDER BY best DESC, record_id LIMIT {CUTOFF}
+"""
+
+
+def build_vectors(con, chunks, emb, dims):
+    """Load the chunk vectors and their record ids into con as arrays of dims floats; return the count."""
+    con.execute(f"CREATE OR REPLACE TABLE emb AS SELECT e.chunk_id, c.record_id, e.embedding::FLOAT[{dims}] AS embedding "
+                f"FROM read_parquet('{emb}') e JOIN read_parquet('{chunks}') c USING (chunk_id)")
+    return con.execute("SELECT count(*) FROM emb").fetchone()[0]
+
+
+def search_vector(con, vec, dims):
+    """Records ranked by their best chunk's cosine similarity to vec, best first, at most CUTOFF of them.
+
+    Exact: every chunk is compared, so no approximate index (vss) is needed at this size.
+    """
+    return [row[0] for row in con.execute(vector_sql(dims), [vec]).fetchall()]
+
+
+def fuse(bm25, vector):
+    """The hybrid ranking (ADR 0004, decision 3): the two rankings fused by RRF, at most CUTOFF records."""
+    return rrf(bm25, vector)[:CUTOFF]
+
+
 def evaluate(questions, search):
     """(id, question, rank) for each answerable question, using search(text) -> ranked record ids."""
     return [(q["id"], q["question"], first_rank(search(q["question"]), q["answers"]))
@@ -92,21 +122,65 @@ def report(method, rows, meta):
     return "\n".join(lines) + "\n"
 
 
+def compare(results, meta):
+    """The results file for several methods: setup, each method's scores, and every question's ranks side by side.
+
+    results maps a method's name to its evaluate() rows; all methods score the same questions in the same order.
+    """
+    methods = list(results)
+    first = results[methods[0]]
+    lines = [f"# Retrieval evaluation: {', '.join(methods)}, {meta['date']}", "",
+             f"- Index: {meta['index']}, {meta['chunks']:,} chunks",
+             f"- Embeddings: {meta['embeddings']}",
+             f"- Questions: {len(first)} answerable, from {meta['questions']}", "",
+             f"| Method | Recall@{TOP_K} | MRR (cutoff {CUTOFF}) |", "|---|---|---|"]
+    for method, rows in results.items():
+        ranks = [rank for _, _, rank in rows]
+        lines.append(f"| {method} | {recall_at(ranks):.2f} | {mrr(ranks):.2f} |")
+    lines += ["", "| Question | " + " | ".join(methods) + " |", "|---|" + "---|" * len(methods)]
+    for i, (qid, text, _) in enumerate(first):
+        cells = [results[method][i][2] for method in methods]
+        lines.append(f"| {qid} {text.replace('|', '/')} | " + " | ".join(str(c) if c else "-" for c in cells) + " |")
+    lines += ["", f"A dash means the first expected record is not in the top {CUTOFF}."]
+    return "\n".join(lines) + "\n"
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Evaluate BM25 retrieval over gold chunks (ADR 0004).")
+    ap = argparse.ArgumentParser(description="Evaluate retrieval over gold chunks (ADR 0004).")
     ap.add_argument("--index-dir", default=INDEX_DIR, type=Path)
     ap.add_argument("--questions", default=QUESTIONS, type=Path)
     ap.add_argument("--out", default=Path("docs/eval/results"), type=Path)
+    ap.add_argument("--vectors", metavar="SLUG", help="also score vector and fused search, using emb=SLUG.parquet")
     args = ap.parse_args(argv)
     import duckdb  # here, not at the top, so the offline checks never need an index
 
     con = duckdb.connect(str(args.index_dir / "search.duckdb"))
     chunks = build_bm25(con, args.index_dir / "chunks.parquet")
-    rows = evaluate(load_questions(args.questions), lambda text: search_bm25(con, text))
+    questions = load_questions(args.questions)
     meta = {"date": dt.date.today().isoformat(), "index": args.index_dir.name, "chunks": chunks,
             "questions": args.questions}
-    text = report("BM25", rows, meta)
-    out = args.out / f"{meta['date']}-{meta['index']}-bm25.md"
+    bm25 = functools.cache(lambda text: search_bm25(con, text))
+    if not args.vectors:
+        text = report("BM25", evaluate(questions, bm25), meta)
+        out = args.out / f"{meta['date']}-{meta['index']}-bm25.md"
+    else:
+        # only the embedding venv has sentence-transformers
+        from sentence_transformers import SentenceTransformer
+
+        info = json.loads((args.index_dir / f"_emb={args.vectors}.json").read_text())
+        dims = info["dimensions"]
+        vcon = duckdb.connect()
+        n = build_vectors(vcon, args.index_dir / "chunks.parquet", args.index_dir / f"emb={args.vectors}.parquet", dims)
+        if n != chunks:
+            return f"{n:,} vectors for {chunks:,} chunks: embed this index again, or rebuild its Parquet"
+        model = SentenceTransformer(info["model"], device="cpu")
+        vector = functools.cache(lambda text: search_vector(
+            vcon, model.encode(info["query_prefix"] + text, normalize_embeddings=True).tolist(), dims))
+        meta["embeddings"] = (f"{info['model']}, {dims} dimensions; chunks embedded on {info.get('device', 'cpu')}, "
+                              "questions on cpu; exact cosine search over every chunk, no approximate index")
+        searches = {"BM25": bm25, "vector": vector, "fused (RRF)": lambda text: fuse(bm25(text), vector(text))}
+        text = compare({name: evaluate(questions, search) for name, search in searches.items()}, meta)
+        out = args.out / f"{meta['date']}-{meta['index']}-hybrid.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text)
     print(text + f"written to {out}")
