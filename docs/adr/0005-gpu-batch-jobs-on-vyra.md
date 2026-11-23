@@ -1,7 +1,7 @@
 # 0005 — Batch work on VYRA's GPU: embeddings as a Kubernetes Job
 
-- Status: Proposed
-- Date: 2026-11-22
+- Status: Accepted
+- Date: 2026-11-22, accepted 2026-11-23
 - Milestone: 1
 
 ## Context
@@ -25,13 +25,17 @@
 
 ## Decisions
 
-### 1. This project's batch work runs as Jobs in `pmg-assist`
+### 1. This project's batch work runs as Jobs in `pmg-assist`, pinned to the free GPU
 
 Embedding runs as a Kubernetes Job in the `pmg-assist` namespace on `zeru`,
-requesting exactly one GPU (`nvidia.com/gpu: 1`). It never takes the GPU that
-`llama-server` holds; the scheduler only offers the unallocated one. The owner
-starts a Job when the second GPU is not needed for other work; a Job holds it
-only while it runs.
+requesting one GPU (`nvidia.com/gpu: 1`) so the scheduler counts it. The
+scheduler's choice is not enforced inside the container (checked 2026-11-23,
+below), so each Job also sets `CUDA_VISIBLE_DEVICES` to the free GPU's UUID,
+`GPU-9c0b7326-8de2-1264-2e5f-c3da2c0e428e` (index 1), and PyTorch then sees
+only that GPU. Jobs never use `llama-server`'s GPU,
+`GPU-a23a0398-19e9-75ee-32a6-664fc70db316` (index 0). The owner starts a Job
+when the free GPU is not needed for other work, such as Houdini; a Job holds it
+only while it runs. Moving a Job to the other GPU is a change to that one value.
 
 ### 2. A GPU image built in CI
 
@@ -72,10 +76,24 @@ output; a partial CPU output is deleted before a GPU run.
   multilingual model.
 - The `llm` namespace holds dozens of dead `llama-server` pods, and nodes
   restart often. Both are cluster matters; this project only records them.
+- The cluster does not enforce GPU allocation inside containers: every pod on
+  `zeru` sees both GPUs. That is a cluster matter too (the device plugin or the
+  container runtime); this project works around it in its own Jobs only.
+- The pin is hard-coded. If the GPUs are swapped or `llama-server` moves, run
+  `infra/k8s/gpu-check.yaml` again and change the value.
+
+## Measured and checked, 2026-11-23
+
+- Throughput: the first Job embedded the 149,067 chunks in 670 seconds, about
+  220 a second, 10–12 times nia's CPU. It ran before the pin, almost certainly
+  on GPU 0 beside `llama-server`; bge-small fitted in the memory left over.
+- Visibility (`infra/k8s/gpu-check.yaml`): inside a `pmg-assist` container
+  `NVIDIA_VISIBLE_DEVICES` is `void`, PyTorch sees both GPUs, and its `cuda:0`
+  is GPU 0: holding 512 MiB raised GPU 0's memory from 10,065 to 10,687 MiB and
+  left GPU 1 at a few MiB. With `CUDA_VISIBLE_DEVICES` set to GPU 1's UUID,
+  PyTorch sees one GPU and the same 512 MiB lands on GPU 1 (1 to 625 MiB),
+  leaving GPU 0 at 10,065 MiB.
 
 ## Open
 
-- Throughput on the RTX 3060, measured on the first Job.
-- Whether the scheduler's GPU matches the one `nvidia-smi` shows as free: the
-  `llama-server` container sees both GPUs, so the first Job checks which one it
-  was given and how much memory is in use on it.
+- When the cluster enforces GPU allocation inside containers, the pin can go.

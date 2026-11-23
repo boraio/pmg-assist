@@ -1,5 +1,6 @@
 # Embedding Job on zeru's free GPU (ADR 0005). Inputs and outputs live on the
-# pmg-data volume (embed-data.yaml). It prints which GPU it was given first.
+# pmg-data volume (embed-data.yaml). It is pinned to the free GPU by UUID (ADR 0005,
+# decision 1); run gpu-check.yaml first if the GPUs may have changed.
 #   kubectl apply -f infra/k8s/embed-job.yaml
 apiVersion: batch/v1
 kind: Job
@@ -26,13 +27,16 @@ spec:
         fsGroup: 10001
       containers:
         - name: embed
-          image: ghcr.io/boraio/pmg-assist-embed:vectors-0.1
+          image: ghcr.io/boraio/pmg-assist-embed:main
           imagePullPolicy: Always
           command: ["sh", "-c"]
           args:
             - >-
               nvidia-smi --query-gpu=index,uuid,name,memory.used,memory.total --format=csv || true;
               exec python3 -m pmg_ingest.embed --index-dir /data/index=0.1 --device cuda --threads 4 --batch 64
+          env:
+            - name: CUDA_VISIBLE_DEVICES
+              value: GPU-9c0b7326-8de2-1264-2e5f-c3da2c0e428e
           resources:
             requests:
               cpu: "2"
