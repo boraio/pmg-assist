@@ -120,6 +120,29 @@ def report(method, rows, meta):
     return "\n".join(lines) + "\n"
 
 
+def compare(results, meta):
+    """The results file for several methods: setup, each method's scores, and every question's ranks side by side.
+
+    results maps a method's name to its evaluate() rows; all methods score the same questions in the same order.
+    """
+    methods = list(results)
+    first = results[methods[0]]
+    lines = [f"# Retrieval evaluation: {', '.join(methods)}, {meta['date']}", "",
+             f"- Index: {meta['index']}, {meta['chunks']:,} chunks",
+             f"- Embeddings: {meta['embeddings']}",
+             f"- Questions: {len(first)} answerable, from {meta['questions']}", "",
+             f"| Method | Recall@{TOP_K} | MRR (cutoff {CUTOFF}) |", "|---|---|---|"]
+    for method, rows in results.items():
+        ranks = [rank for _, _, rank in rows]
+        lines.append(f"| {method} | {recall_at(ranks):.2f} | {mrr(ranks):.2f} |")
+    lines += ["", "| Question | " + " | ".join(methods) + " |", "|---|" + "---|" * len(methods)]
+    for i, (qid, text, _) in enumerate(first):
+        cells = [results[method][i][2] for method in methods]
+        lines.append(f"| {qid} {text.replace('|', '/')} | " + " | ".join(str(c) if c else "-" for c in cells) + " |")
+    lines += ["", f"A dash means the first expected record is not in the top {CUTOFF}."]
+    return "\n".join(lines) + "\n"
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Evaluate BM25 retrieval over gold chunks (ADR 0004).")
     ap.add_argument("--index-dir", default=INDEX_DIR, type=Path)
