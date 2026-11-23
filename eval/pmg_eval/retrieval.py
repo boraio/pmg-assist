@@ -67,6 +67,21 @@ def build_bm25(con, chunks):
     return con.execute("SELECT count(*) FROM chunks").fetchone()[0]
 
 
+def vector_sql(dims):
+    """Records ranked by their best chunk's cosine similarity to a query vector of dims floats."""
+    return f"""
+SELECT record_id, max(array_cosine_similarity(embedding, ?::FLOAT[{dims}])) AS best FROM emb
+GROUP BY record_id ORDER BY best DESC, record_id LIMIT {CUTOFF}
+"""
+
+
+def build_vectors(con, chunks, emb, dims):
+    """Load the chunk vectors and their record ids into con as arrays of dims floats; return the count."""
+    con.execute(f"CREATE OR REPLACE TABLE emb AS SELECT e.chunk_id, c.record_id, e.embedding::FLOAT[{dims}] AS embedding "
+                f"FROM read_parquet('{emb}') e JOIN read_parquet('{chunks}') c USING (chunk_id)")
+    return con.execute("SELECT count(*) FROM emb").fetchone()[0]
+
+
 def search_bm25(con, text):
     """Records ranked by their best chunk's BM25 score, best first, at most CUTOFF of them."""
     return [row[0] for row in con.execute(BM25_SQL, [text]).fetchall()]
