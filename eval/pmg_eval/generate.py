@@ -2,8 +2,8 @@
 
 For each eval question: fused retrieval, the similarity floor, the generator (any OpenAI-compatible chat
 endpoint), then the server's checks on every statement. Writes a dated results file of counts for the repo,
-and, outside the repo, the raw outputs and a review sheet for the owner, because chunk text can hold
-private people's names.
+and, under the gitignored data/ folder, the raw outputs and a review sheet for the owner, because chunk text
+can hold private people's names.
 """
 
 import argparse
@@ -349,10 +349,10 @@ def main(argv=None):
     ap.add_argument("--vectors", default="bge-small-en-v1.5", metavar="SLUG")
     ap.add_argument("--only", help="comma-separated question ids, for a short trial run")
     ap.add_argument("--dry-run", action="store_true",
-                    help="report prompt sizes and write the first question's messages outside the repo; call nothing")
+                    help="report prompt sizes and write the first question's messages under --private; call nothing")
     ap.add_argument("--out", default=Path("docs/eval/results"), type=Path)
-    ap.add_argument("--private", default=Path.home() / "ref" / "review", type=Path,
-                    help="outside the repo: raw replies and the review sheet")
+    ap.add_argument("--private", default=Path("data/review"), type=Path,
+                    help="raw replies and the review sheet; data/ is gitignored, like the records they quote")
     args = ap.parse_args(argv)
     # here, not at the top: the offline checks need neither DuckDB nor a model,
     # and only the embedding venv has sentence-transformers
