@@ -128,8 +128,12 @@ meaningful rate is not used, whatever its other numbers.
 - **Hosted:** one model, chosen by the owner. Its API key lives outside the
   repo (an environment variable on nia, a Kubernetes secret if it runs on the
   cluster).
-- The `llama-server` on GPU 0 is not a candidate: it is a code model, and aider
-  depends on it.
+- **First, for the proof of concept (owner, 2026-11-25):** the `llama-server`
+  already on GPU 0 (`qwen2.5-coder-14b-instruct`, which aider also uses). It
+  needs no new deployment, so the whole pipeline is measured end to end now.
+  It is a code model and it is shared, so its numbers are a baseline, not a
+  selection: evals run while aider is idle, and the candidates above are
+  measured against it later.
 
 ## Consequences
 
