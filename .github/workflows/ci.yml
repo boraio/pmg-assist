@@ -47,6 +47,9 @@ jobs:
       - name: Eval checks
         run: python eval/tests/test_retrieval.py
 
+      - name: Generation checks
+        run: python eval/tests/test_generate.py
+
       - name: API contract tests
         run: python -m pytest api/tests -q
 
