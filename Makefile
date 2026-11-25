@@ -42,6 +42,7 @@ test:   ## offline checks
 	$(PY) ingest/tests/test_embed.py
 	$(PY) eval/tests/test_retrieval.py
 	$(PY) eval/tests/test_generate.py
+	$(PY) eval/tests/test_review.py
 	$(PY) -m pytest api/tests -q
 
 spec:   ## validate the API contract

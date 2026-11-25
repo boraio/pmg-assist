@@ -50,6 +50,9 @@ jobs:
       - name: Generation checks
         run: python eval/tests/test_generate.py
 
+      - name: Review counter checks
+        run: python eval/tests/test_review.py
+
       - name: API contract tests
         run: python -m pytest api/tests -q
 
