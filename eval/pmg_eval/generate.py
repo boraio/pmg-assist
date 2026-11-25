@@ -22,7 +22,8 @@ from . import retrieval as r
 TOP_RECORDS = 5  # records whose chunks reach the generator (ADR 0006, decision 1)
 CHUNKS_PER_RECORD = 2  # best-matching chunks per record; measured per candidate (ADR 0006, Open)
 FLOOR_MARGIN = 0.02  # the floor sits this far below the lowest answerable top similarity (decision 2)
-MAX_TOKENS = 1024
+MAX_TOKENS = 1536
+PROMPT_VERSION = 2  # bump whenever SYSTEM changes; every results file names it
 REASONS = ("insufficient_evidence", "requests_evaluation")
 STOPLIST = frozenset()  # capitalised runs exempt from the name check: start empty, add only on review evidence
 # sentence-initial words that are capitalised only because they start a sentence; never names
@@ -36,9 +37,9 @@ SYSTEM = """You answer questions about South African parliamentary records, usin
 
 Rules:
 1. Use only the excerpts. Do not use anything you know from elsewhere.
-2. If the excerpts do not answer the question, refuse with reason "insufficient_evidence".
-3. If the question asks for a prediction, an opinion, a ranking, a characterisation of a person, party or policy, or advice on how to vote, refuse with reason "requests_evaluation", whatever the excerpts say.
-4. Otherwise answer with one or more short statements in plain text, without Markdown.
+2. If the excerpts do not answer the question at all, refuse with reason "insufficient_evidence". If they answer part of it, answer that part.
+3. If the question asks you to predict what will happen, to give an opinion, to rank, to characterise a person, party or policy, or to advise how to vote, refuse with reason "requests_evaluation", whatever the excerpts say. A question about what government or Parliament has stated, planned, decided or done is factual, even when it is phrased in the future tense: answer it from the excerpts.
+4. Otherwise answer with at most 5 short statements in plain text, without Markdown.
 5. Every statement cites at least one excerpt by its id, with a quote copied exactly, character for character, from that excerpt's text. Never reword a quote. Keep each quote to the words that support the statement.
 6. Name a person only if the quoted text contains that name. Say what a record states, not who said it.
 7. Each excerpt starts with its record's date. When the answer depends on time, give the date of the record.
@@ -279,6 +280,7 @@ def summary(results, meta):
     kept = sum(len(x["statements"]) for x in results)
     lines = [f"# Generation evaluation: {meta['label']}, {meta['date']}", "",
              f"- Generator: {meta['model']} at {meta['endpoint']}, JSON schema sent: {meta['schema']}",
+             f"- Prompt version: {PROMPT_VERSION}; up to {MAX_TOKENS} output tokens; temperature 0",
              (f"- Retrieval: {meta['index']}, {meta['embeddings']}; top {TOP_RECORDS} fused records, "
               f"{CHUNKS_PER_RECORD} chunks each"),
              f"- Similarity floor: {meta['floor']} (lowest answerable top similarity less {FLOOR_MARGIN})",

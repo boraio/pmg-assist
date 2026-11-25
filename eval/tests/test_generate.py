@@ -56,6 +56,9 @@ def main():
     check("two messages: the rules, then the question", [m["role"] for m in msgs], ["system", "user"])
     check("the rules name both refusal reasons",
           ('"insufficient_evidence"' in msgs[0]["content"], '"requests_evaluation"' in msgs[0]["content"]), (True, True))
+    check("prompt v2: partial answers, stated plans are factual, at most 5 statements",
+          (g.PROMPT_VERSION, "answer that part" in g.SYSTEM, "phrased in the future tense" in g.SYSTEM,
+           "at most 5 short statements" in g.SYSTEM), (2, True, True, True))
     check("each excerpt carries its id and header, then its text",
           "[c1] NW12, 2024-05-01. Question to: Minister of Water.\nThe   department" in msgs[1]["content"], True)
     check("the question comes first", msgs[1]["content"].startswith("Question: How many boreholes?\n\nExcerpts:"), True)
@@ -150,7 +153,7 @@ def main():
         text, tokens, _ = g.chat("http://gen:8080/v1/", "m", "k", schema=True)(msgs)
         check("the call goes to /chat/completions", sent["url"], "http://gen:8080/v1/chat/completions")
         check("temperature 0, a token cap, and the messages",
-              (sent["body"]["temperature"], sent["body"]["max_tokens"], sent["body"]["messages"]), (0, 1024, msgs))
+              (sent["body"]["temperature"], sent["body"]["max_tokens"], sent["body"]["messages"]), (0, 1536, msgs))
         check("the schema is sent only when asked", sent["body"]["response_format"]["json_schema"]["schema"], g.SCHEMA)
         check("the key goes in a bearer header", sent["auth"], "Bearer k")
         check("the reply text and output tokens come back", (text, tokens), ("{}", 3))
@@ -190,6 +193,7 @@ def main():
     check("the summary gives p95 latency and tokens per second",
           ("- Latency p95: 2.0 s over 3 calls" in text, "prompt time included: 5.0" in text), (True, True))
     check("the summary leaves groundedness to the review", "from the owner's review sheet, not yet counted" in text, True)
+    check("the summary names the prompt version", "- Prompt version: 2; up to 1536 output tokens; temperature 0" in text, True)
     check("the summary holds no record text", ("boreholes" in text.split("| Question |")[0], "Limpopo" in text),
           (False, False))
     sheet = g.review_sheet(results, meta)
